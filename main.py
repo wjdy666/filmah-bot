@@ -2,22 +2,21 @@ import os
 import logging
 import sqlite3
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# إعداد الـ Logs
+# إعداد الـ Logs لمراقبة البوت
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# الإعدادات الأساسية من Render والآيدي الخاص بك
+# الإعدادات الأساسية
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("API_KEY")
 ADMIN_ID = 1436656132  # الآيدي الخاص بك كأدمن
 
-# إنشاء وقراءة قاعدة البيانات لحفظ الأفلام المربوطة
 def init_db():
     conn = sqlite3.connect('movies_db.sqlite')
     cursor = conn.cursor()
@@ -34,31 +33,36 @@ def init_db():
 init_db()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """رسالة الترحيب بالبث والمشاهدة الداخلية."""
+    """دالة الترحيب."""
     welcome = (
-        "🎬 **أهلاً بك في بوت الأفلام والمسلسلات للمشاهدة المباشرة!**\n\n"
-        "🍿 أرسل اسم أي فيلم أو مسلسل، وسأحضره لك كاملاً للمشاهدة داخل تليجرام فوراً بدون إعلانات أو روابط خارجية!"
+        "🎬 **أهلاً بك في بوت الأفلام للمشاهدة المباشرة داخل تليجرام!**\n\n"
+        "🍿 أرسل اسم أي فيلم، وسأحضره لك كاملاً للمشاهدة فوراً بدون روابط خارجية!"
     )
     await update.message.reply_text(welcome, parse_mode="Markdown")
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """البحث الذكي عن الفيلم وربطه بالفيديو."""
+    """البحث المباشر عن الفيلم."""
     movie_name = update.message.text
     user_id = update.effective_user.id
+    
+    # إذا كان الأدمن يرسل نصاً ويبدأ بكلمة "ربط"، نتجاهله هنا لأنه مخصص للرفع
+    if context.user_data.get('waiting_for_video'):
+        await update.message.reply_text("⚠️ أنت في وضع ربط الفيلم، أرسل ملف الفيديو (فيديو أصلي) أو أرسل /start للإلغاء.")
+        return
+
     await update.message.reply_chat_action(action="upload_photo")
 
     if not TMDB_API_KEY:
-        await update.message.reply_text("⚠️ خطأ: لم يتم ضبط الـ API_KEY في الإعدادات.")
+        await update.message.reply_text("⚠️ خطأ: لم يتم ضبط الـ API_KEY.")
         return
 
-    # جلب تفاصيل الفيلم من TMDB باللغة العربية
     search_url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={movie_name}&language=ar"
     
     try:
         response = requests.get(search_url).json()
         results = response.get('results', [])
 
-        if not results:
+        if not map or not results:
             await update.message.reply_text("❌ لم يتم العثور على هذا العمل، تأكد من كتابة الاسم بالشكل الصحيح.")
             return
 
@@ -79,7 +83,7 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         poster_path = item.get('poster_path')
         poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
 
-        # الفحص هل الفيلم مرفوع ومربوط مسبقاً في قاعدة البيانات؟
+        # الفحص في قاعدة البيانات
         conn = sqlite3.connect('movies_db.sqlite')
         cursor = conn.cursor()
         cursor.execute("SELECT file_id FROM movies WHERE tmdb_id = ?", (tmdb_id,))
@@ -87,54 +91,34 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         conn.close()
 
         if row:
-            # الفيلم موجود! نرسل الوصف ومعه الفيديو الأصلي فوراً للمشاهدة
+            # إذا الفيلم موجود نرسل البوستر ثم الفيديو فوراً
             file_id = row[0]
             if poster_url:
                 await update.message.reply_photo(photo=poster_url, caption=caption, parse_mode="Markdown")
             else:
                 await update.message.reply_text(caption, parse_mode="Markdown")
             
-            # إرسال الفيديو المدمج في تليجرام
             await update.message.reply_video(video=file_id, caption=f"🍿 مشاهدة ممتعة لفيلم: {title}")
         else:
-            # الفيلم غير موجود في المخزن حالياً
-            keyboard = []
-            # إذا كان الباحث هو أنت (الأدمن)، يظهر لك زر الربط السري
+            # إذا الفيلم غير موجود
             if user_id == ADMIN_ID:
-                keyboard.append([InlineKeyboardButton("📥 ربط ملف فيديو (أدمن)", callback_data=f"link_{tmdb_id}_{title[:20]}")])
-                caption += "\n\n⚠️ **هذا الفيلم غير مربوط بفيديو حالياً، يمكنك ضغط الزر بالأسفل لربطه.**"
+                context.user_data['waiting_for_video'] = tmdb_id
+                context.user_data['waiting_title'] = title
+                caption += f"\n\n⚙️ **(تنبيه الأدمن):** هذا الفيلم غير متوفر. لربطه الآن، قم بعمل توجيه (Forward) لملف الفيديو الأصلي الخاص بالفيلم إلى هنا فوراً."
             else:
-                caption += "\n\n⏳ **هذا الفيلم سيتم توفيره قريباً من قِبل الإدارة، ابحث عن فيلم آخر!**"
+                caption += "\n\n⏳ **هذا الفيلم غير متوفر حالياً، سيتم توفيره قريباً من قِبل الإدارة!**"
 
-            reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-            
             if poster_url:
-                await update.message.reply_photo(photo=poster_url, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
+                await update.message.reply_photo(photo=poster_url, caption=caption, parse_mode="Markdown")
             else:
-                await update.message.reply_text(caption, reply_markup=reply_markup, parse_mode="Markdown")
+                await update.message.reply_text(caption, parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Search Error: {e}")
-        await update.message.reply_text("❌ حدث خطأ أثناء معالجة البحث.")
-
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """معالجة ضغط زر الربط للأدمن."""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.from_user.id != ADMIN_ID:
-        return
-
-    data = query.data
-    if data.startswith("link_"):
-        _, tmdb_id, movie_title = data.split("_", 2)
-        # حفظ الجلسة مؤقتاً لمعرفة أي فيلم نقوم بربطه الآن
-        context.user_data['waiting_for_video'] = tmdb_id
-        context.user_data['waiting_title'] = movie_title
-        await query.edit_message_caption(caption=f"🔄 ‏قم الآن بعمل توجيه (Forward) لملف الفيلم الأصلي من أي قناة إلى هنا لربطه بـ: {movie_title}")
+        await update.message.reply_text("❌ حدث خطأ في السيرفر أثناء معالجة البحث.")
 
 async def receive_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """استقبال ملف الفيديو من الأدمن وحفظه في قاعدة البيانات."""
+    """استقبل الفيديو من الأدمن واحفظه."""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID or 'waiting_for_video' not in context.user_data:
         return
@@ -142,21 +126,20 @@ async def receive_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     tmdb_id = context.user_data['waiting_for_video']
     title = context.user_data['waiting_title']
     
-    # جلب الـ File ID الفريد الخاص بالفيديو من سيرفرات تليجرام
+    # جلب معرف الملف
     file_id = update.message.video.file_id
 
-    # حفظ الرابط في قاعدة البيانات
+    # الحفظ في قاعدة البيانات
     conn = sqlite3.connect('movies_db.sqlite')
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO movies (tmdb_id, title, file_id) VALUES (?, ?, ?)", (tmdb_id, title, file_id))
     conn.commit()
     conn.close()
 
-    # تنظيف الجلسة وتأكيد النجاح
     del context.user_data['waiting_for_video']
     del context.user_data['waiting_title']
     
-    await update.message.reply_text(f"✅ تم ربط وحفظ فيلم ({title}) بنجاح! الآن أي مستخدم يبحث عنه سيصله الفيديو فوراً للمشاهدة داخل التطبيق.")
+    await update.message.reply_text(f"✅ تم ربط وحفظ فيلم ({title}) بنجاح داخل تليجرام!")
 
 def main() -> None:
     """تشغيل البوت."""
@@ -164,8 +147,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
-    application.add_handler(Update.handler_class(handle_callback))  # لتشغيل الأزرار
-    application.add_handler(MessageHandler(filters.VIDEO, receive_video))  # لاستقبال الأفلام
+    application.add_handler(MessageHandler(filters.VIDEO, receive_video))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
