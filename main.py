@@ -1,97 +1,128 @@
 import os
-import requests
+import sys
+import html
+import logging
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 
-# Environment variables
+# Configure logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-BASE_URL = "https://api.themoviedb.org/3"
+if not BOT_TOKEN or not TMDB_API_KEY:
+    logger.error("BOT_TOKEN or TMDB_API_KEY environment variables are missing.")
+    sys.exit(1)
 
 
-# Search function
-def search_tmdb(query):
-    url = f"{BASE_URL}/search/multi"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "query": query,
-        "language": "en-US"
-    }
-
+async def fetch_tmdb(endpoint: str, params: dict) -> dict:
+    url = f"https://api.themoviedb.org/3{endpoint}"
+    params["api_key"] = TMDB_API_KEY
     try:
-        response = requests.get(url, params=params, timeout=10)
-        return response.json().get("results", [])
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
-        print("Search error:", e)
-        return []
+        logger.error(f"TMDB API Error: {e}")
+        return {}
 
 
-# Start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
-        [InlineKeyboardButton("🎬 Search", callback_data="search")],
-        [InlineKeyboardButton("⭐ Top Rated", callback_data="top")]
+        [
+            InlineKeyboardButton("Search Movies", callback_data="search"),
+            InlineKeyboardButton("Top Rated", callback_data="top_rated"),
+        ]
     ]
-
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
-        "Welcome to Movie Bot 🎥",
-        reply_markup=reply_markup
+        "Welcome! Choose an option below or directly type a movie name to search:",
+        reply_markup=reply_markup,
     )
 
 
-# Button handler
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
 
     if query.data == "search":
-        await query.edit_message_text("Send a movie or series name 🎬")
+        await query.edit_message_text(
+            "Send me the name of the movie you want to search for:"
+        )
 
-    elif query.data == "top":
-        url = f"{BASE_URL}/movie/top_rated"
-        response = requests.get(url, params={
-            "api_key": TMDB_API_KEY,
-            "language": "en-US"
-        }).json()
+    elif query.data == "top_rated":
+        data = await fetch_tmdb("/movie/top_rated", {"language": "en-US", "page": 1})
+        results = data.get("results")
 
-        message = "⭐ Top Rated Movies:\n\n"
+        if not results:
+            await query.edit_message_text("Could not fetch top-rated movies at this time.")
+            return
 
-        for movie in response.get("results", [])[:10]:
-            title = movie.get("title", "N/A")
-            rating = movie.get("vote_average", 0)
-            message += f"🎬 {title} ⭐ {rating}\n"
+        text = "🌟 <b>Top Rated Movies:</b>\n\n"
+        for movie in results[:5]:
+            title = movie.get("title") or "Unknown Title"
+            rating = movie.get("vote_average") or 0.0
+            release_date = movie.get("release_date") or ""
+            year = release_date[:4] if release_date else "N/A"
 
-        await query.edit_message_text(message)
+            text += f"• <b>{html.escape(title)}</b> ({html.escape(year)}) - ⭐ {rating}/10\n"
+
+        await query.edit_message_text(text, parse_mode="HTML")
 
 
-# Text handler
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    results = search_tmdb(text)
-
-    if not results:
-        await update.message.reply_text("No results found 😕")
+async def search_movies(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_input = update.message.text
+    if not user_input:
         return
 
-    movie = results[0]
-    title = movie.get("title") or movie.get("name")
-    overview = movie.get("overview", "No description available")
-    rating = movie.get("vote_average", 0)
+    data = await fetch_tmdb("/search/movie", {"query": user_input, "language": "en-US", "page": 1})
+    results = data.get("results")
 
-    await update.message.reply_text(
-        f"🎬 {title}\n⭐ {rating}\n\n{overview}"
-    )
+    if not results:
+        await update.message.reply_text(f"No results found for '{html.escape(user_input)}'.")
+        return
+
+    text = f"🔍 <b>Search results for '{html.escape(user_input)}':</b>\n\n"
+    for movie in results[:5]:
+        title = movie.get("title") or "Unknown Title"
+        rating = movie.get("vote_average") or 0.0
+        release_date = movie.get("release_date") or ""
+        year = release_date[:4] if release_date else "N/A"
+        overview = movie.get("overview") or "No description available."
+        overview_snippet = (overview[:100] + "...") if len(overview) > 100 else overview
+
+        text += (
+            f"🎬 <b>{html.escape(title)}</b> ({html.escape(year)})\n"
+            f"⭐ {rating}/10\n"
+            f"📝 {html.escape(overview_snippet)}\n\n"
+        )
+
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
-# Run bot
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+def main() -> None:
+    application = Application.builder().token(BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(buttons))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movies))
 
-print("Bot is running...")
-app.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
