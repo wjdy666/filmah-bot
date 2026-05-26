@@ -48,31 +48,83 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    # تفادي مشاكل استدعاء الدالة من رسالة أو من زر تراجع
     if update.message:
         await update.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
     elif update.callback_query:
         await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
 
-# 5. دالة معالجة الضغط على الأزرار التفاعلية
+# 5. دالة معالجة الضغط على الأزرار التفاعلية وتطويرها
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     if query.data == "search_movie":
-        await query.edit_message_text("📥 أرسل لي اسم الفيلم الذي تبحث عنه باللغة العربية أو الإنجليزية:")
+        context.user_data['search_type'] = 'movie'
+        await query.edit_message_text("📥 أرسل لي اسم **الفيلم** الذي تبحث عنه باللغة العربية أو الإنجليزية:")
     elif query.data == "search_tv":
-        await query.edit_message_text("📥 أرسل لي اسم المسلسل الذي تبحث عنه:")
+        context.user_data['search_type'] = 'tv'
+        await query.edit_message_text("📥 أرسل لي اسم **المسلسل** الذي تبحث عنه:")
     elif query.data == "search_general":
-        await query.edit_message_text("📥 اكتب كلمة البحث العامة وسأفتش لك في الأفلام والمسلسلات:")
+        context.user_data['search_type'] = 'multi'
+        await query.edit_message_text("📥 اكتب كلمة البحث العامة وسأفتش لك في الأفلام والمسلسلات معاً:")
+        
+    # --- تطوير: تشغيل ميزة أفضل الأفلام تقييماً تلقائياً ---
     elif query.data == "top_rated":
         await query.edit_message_text("🔄 جاري جلب قائمة أفضل الأفلام تقييماً من TMDB...")
+        url = f"https://api.themoviedb.org/3/movie/top_rated?api_key={TMDB_API_KEY}&language=ar-SA&page=1"
+        try:
+            res = requests.get(url).json()
+            movies = res.get("results", [])[:5] # جلب أفضل 5 أفلام لشاشات الموبايل
+            
+            if not movies:
+                await query.edit_message_text("❌ لم أتمكن من جلب الأفلام حالياً، حاول لاحقاً.")
+                return
+                
+            top_text = "⭐ **أفضل الأفلام تقييماً حالياً:**\n\n"
+            for idx, movie in enumerate(movies, 1):
+                title = movie.get("title")
+                rating = movie.get("vote_average", 0.0)
+                year = movie.get("release_date", "----")[:4]
+                top_text += f"{idx}. 🎬 **{title}** ({year}) — ⭐ {rating}/10\n"
+            
+            keyboard = [[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="main_menu")]]
+            await query.edit_message_text(top_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            
+        except Exception as e:
+            logger.error(f"خطأ في جلب أفضل الأفلام: {e}")
+            await query.edit_message_text("⚠️ حدث خطأ أثناء الاتصال بالسيرفر.")
+            
+    # زر العودة للقائمة الرئيسية
+    elif query.data == "main_menu":
+        await query.message.delete() # حذف الرسالة الحالية لإرسال القائمة بشكل نظيف
+        await start(update, context)
 
-# 6. دالة استقبال نصوص البحث والربط مع TMDB
+    # --- تطوير: عرض قصة العمل عند الضغط على الزر الفرعي للفيلم ---
+    elif query.data.startswith("show_story_"):
+        _, media_type, media_id = query.data.split("_")
+        url = f"https://api.themoviedb.org/3/{media_type}/{media_id}?api_key={TMDB_API_KEY}&language=ar"
+        try:
+            res = requests.get(url).json()
+            overview = res.get("overview") or "لا يوجد وصف متوفر حالياً باللغة العربية."
+            title = res.get("title") or res.get("name")
+            
+            story_text = f"📝 **قصة عمل ({title}):**\n\n{overview}"
+            await query.message.reply_text(story_text, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"خطأ في جلب قصة العمل: {e}")
+
+# 6. دالة استقبال نصوص البحث والربط المطور مع TMDB
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text
-    await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في قاعدة بيانات TMDB...", parse_mode="Markdown")
     
-    url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={search_query}&language=ar"
+    # معرفة نوع البحث المحدد من الأزرار (فيلم، مسلسل، أو عام)، الافتراضي عام 'multi'
+    search_type = context.user_data.get('search_type', 'multi')
+    
+    await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في قاعدة بيانات فِلْمَه...", parse_mode="Markdown")
+    
+    # تحديد رابط الـ API بناءً على اختيار المستخدم لضمان دقة البحث
+    url = f"https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={search_query}&language=ar"
     
     try:
         response = requests.get(url).json()
@@ -83,22 +135,37 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         first_result = results[0]
-        media_type = first_result.get("media_type", "movie")
+        
+        # استخراج البيانات بذكاء حسب نوع النتيجة المسترجعة
+        actual_media_type = first_result.get("media_type", search_type)
+        if actual_media_type == "multi": 
+            actual_media_type = "movie" if "title" in first_result else "tv"
+            
         title = first_result.get("title") or first_result.get("name") or "عنوان غير معروف"
-        overview = first_result.get("overview") or "لا يوجد وصف متوفر حالياً."
         rating = first_result.get("vote_average", 0.0)
         poster_path = first_result.get("poster_path")
+        media_id = first_result.get("id")
+        year = (first_result.get("release_date") or first_result.get("first_air_date") or "----")[:4]
         
-        result_text = f"🎬 **الاسم:** {title}\n"
-        result_text += f"🏷️ **النوع:** {'فيلم' if media_type == 'movie' else 'مسلسل'}\n"
-        result_text += f"⭐ **التقييم:** {rating}/10\n\n"
-        result_text += f"📝 **القصة:**\n{overview}"
+        result_text = f"🎬 **الاسم:** {title} ({year})\n"
+        result_text += f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
+        result_text += f"⭐ **التقييم:** {rating}/10\n"
+        
+        # أزرار تفاعلية تظهر أسفل النتيجة تجعل شكل البوت احترافي وسريع على الموبايل
+        keyboard = [
+            [InlineKeyboardButton("⭐ قصة العمل بالتفصيل", callback_data=f"show_story_{actual_media_type}_{media_id}")],
+            [InlineKeyboardButton("🔙 قائمة البحث الرئيسية", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         if poster_path:
             poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-            await update.message.reply_photo(photo=poster_url, caption=result_text, parse_mode="Markdown")
+            await update.message.reply_photo(photo=poster_url, caption=result_text, parse_mode="Markdown", reply_markup=reply_markup)
         else:
-            await update.message.reply_text(result_text, parse_mode="Markdown")
+            await update.message.reply_text(result_text, parse_mode="Markdown", reply_markup=reply_markup)
+            
+        # إعادة تعيين نوع البحث التلقائي بعد انتهاء العملية
+        context.user_data['search_type'] = 'multi'
             
     except Exception as e:
         logger.error(f"خطأ أثناء جلب البيانات من TMDB: {e}")
