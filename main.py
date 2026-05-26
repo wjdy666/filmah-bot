@@ -338,8 +338,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # format: add_fav_{media_type}_{id}
         parts = data.split("_")
         if len(parts) >= 3:
-            media_type = parts[2]
-            media_id = parts[3] if len(parts) > 3 else None
+            # parts example: ["add", "fav", "movie", "12345"]
+            # handle both old and new formats
+            if len(parts) == 3:
+                # old format: add_fav_{id}
+                media_type = "movie"
+                media_id = parts[2]
+            else:
+                media_type = parts[2]
+                media_id = parts[3] if len(parts) > 3 else None
             try:
                 url = f"https://api.themoviedb.org/3/{media_type}/{media_id}?api_key={TMDB_API_KEY}&language=ar"
                 res = requests.get(url, timeout=5).json()
@@ -430,7 +437,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Toggle search error: {e}")
             await query.answer("حدث خطأ أثناء تبديل النوع.")
 
-# Handle text messages (search)
+# Handle text messages (search) - FIXED: send first result card + pagination list
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text.strip()
     search_type = context.user_data.get('search_type', 'multi')  # movie, tv, or multi
@@ -438,9 +445,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في سيرفرات فِلْمَه...", parse_mode="Markdown")
 
-    # default to page 1
     page = 1
-    # choose endpoint
     endpoint = f"https://api.themoviedb.org/3/search/{search_type}"
     url = f"{endpoint}?api_key={TMDB_API_KEY}&query={urllib.parse.quote_plus(search_query)}&language=ar&page={page}"
 
@@ -454,7 +459,13 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['search_type'] = 'multi'
             return
 
-        # send a single message with list + pagination keyboard
+        # 1) أرسل بطاقة النتيجة الأولى (كما في السلوك القديم)
+        try:
+            await send_movie_card(context, chat_id, results[0])
+        except Exception as e:
+            logger.error(f"Failed to send first result card: {e}")
+
+        # 2) ثم أرسل قائمة مختصرة مع لوحة الترقيم (اختياري للمستخدمين الذين يريدون التنقل)
         text = format_results_list(results, search_type, page, total)
         kb = build_pagination_keyboard(search_query, search_type, page, total)
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
