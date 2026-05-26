@@ -5,10 +5,11 @@ import threading
 from fastapi import FastAPI
 import uvicorn
 
-# 1. إعداد سيرفر الويب الوهمي لتخطي نظام النوم في Render
+# 1. إعداد سيرفر الويب الوهمي مع دعم فحص نظام Render
 app = FastAPI()
 
 @app.get("/")
+@app.head("/")
 def home():
     return "Bot is alive and running!"
 
