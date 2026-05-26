@@ -19,10 +19,11 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
 
-# 3. إعداد سيرفر الويب FastAPI
+# 3. إعداد سيرفر الويب FastAPI لدعم GET و HEAD معاً
 app = FastAPI()
 
 @app.get("/")
+@app.head("/")
 def home():
     return "Bot is alive and running!"
 
@@ -103,7 +104,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطأ أثناء جلب البيانات من TMDB: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء الاتصال بقاعدة بيانات الأفلام، يرجى المحاولة لاحقاً.")
 
-# 7. الحيلة السحرية: تشغيل البوت عند إقلاع السيرفر داخل نفس الـ Event Loop
+# 7. تشغيل البوت متزامن مع الـ Startup لـ FastAPI
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -113,10 +114,8 @@ async def startup_event():
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
         
-        # تهيئة البوت وتشغيل الاستماع بشكل متوافق تماماً مع الـ Async
         await application.initialize()
         await application.start()
-        # تشغيل الـ Polling كخلفية غير محظورة داخل نفس الـ loop
         asyncio.create_task(application.updater.start_polling())
         logger.info("تم تشغيل مستمعات البوت بنجاح متزامن مع FastAPI!")
     except Exception as e:
