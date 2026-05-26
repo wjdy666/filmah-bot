@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والرموز الأساسية (تقرأ من السيرفر بأمان)
+# 2. الإعدادات والرموز الأساسية
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
@@ -32,7 +32,7 @@ GENRES = {
     "scifi": {"id": 878, "name": "🛸 خيال علمي"}
 }
 
-# 3. إعداد سيرفر الويب FastAPI للحفاظ على استقرار السيرفر من النوم على Render
+# 3. إعداد سيرفر الويب FastAPI للحفاظ على استقرار السيرفر من النوم
 app = FastAPI()
 
 @app.get("/")
@@ -60,7 +60,7 @@ def generate_watch_url(media_type, media_id):
     else:
         return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
 
-# --- 🌟 الدالة الاحترافية والمحمية لإرسال بطاقات الأفلام بالخيارات الذكية الثلاثة 🌟 ---
+# --- 🌟 الدالة الاحترافية المحمية تماماً من التعليق لإرسال بطاقات الأفلام 🌟 ---
 async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
@@ -70,7 +70,6 @@ async def send_movie_card(context, chat_id, movie):
         rating = movie.get("vote_average", 0.0)
         poster_path = movie.get("poster_path")
         
-        # حماية نصوص القصة من تجاوز ليميت تليجرام لمنع الكراش
         overview = movie.get("overview") or "لا يوجد وصف متوفر حالياً باللغة العربية لهذا العمل السينمائي."
         if len(overview) > 400:
             overview = overview[:400] + "..."
@@ -90,16 +89,10 @@ async def send_movie_card(context, chat_id, movie):
             trailer_url = get_trailer_url(actual_media_type, movie_id)
         except: pass
         
-        # 1. رابط المشاهدة الأصلي (يفتح تلقائياً كصفحة داخل تليجرام In-App Browser)
         watch_url = generate_watch_url(actual_media_type, movie_id)
-        
-        # 2. الرابط العميق لمتصفح Brave (يجبر النظام على فتحه داخل تطبيق Brave لمنع الإعلانات)
         brave_deep_link = f"brave://open-url?url={watch_url}"
-        
-        # 3. الرابط العميق لمتصفح جوجل كروم الخارجي
         chrome_deep_link = watch_url.replace("https://", "googlechrome://")
         
-        # هندسة وتوزيع الأزرار بدقة واحترافية عالية لتناسب شاشات الموبايل
         keyboard = [
             [InlineKeyboardButton("🍿 مشاهدة سريعة (داخل تليجرام)", url=watch_url)],
             [InlineKeyboardButton("🍿🦁 افتحه في متصفح Brave (منع الإعلانات)", url=brave_deep_link)],
@@ -132,7 +125,7 @@ async def send_movie_card(context, chat_id, movie):
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
-# 4. رسالة الترحيب الأصلية الكاملة لبوت فِلْمَه
+# 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه!**\n\n"
@@ -165,18 +158,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
         await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
 
-# أمر المساعدة ودليل الاستخدام المطور
+# أمر المساعدة
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
         "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
-        "🔹 **المشاهدة بدون إعلانات:** اضغط على زر '🍿🦁 افتحه في متصفح Brave' لتجاوز الإعلانات تماماً باستخدام تطبيق Brave الأصلي.\n"
+        "🔹 **المشاهدة:** سيظهر لك زر '🍿 مشاهدة العمل الآن' يأخذك لسيرفر خارجي يدعم الترجمة العربية.\n"
+        "💡 _تنويه للمشاهدة:_ لتجربة خالية من الإعلانات المنبثقة المزعجة، يفضل فتح روابط المشاهدة عبر متصفح يدعم حظر الإعلانات مثل **Brave**.\n"
         "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# 5. دالة معالجة الضغط على الأزرار التفاعلية بالكامل بدون نقص
+# 5. دالة معالجة الضغط على الأزرار التفاعلية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -217,7 +211,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             res = requests.get(url, timeout=5).json()
             movies = res.get("results", [])[:3]
             
-            # تنظيف الشاشة بحذف رسالة التحميل أولاً لراحة العين
+            # نحذف رسالة الانتظار أولاً قبل إرسال الكروت بشكل منظم ومريح للعين
             try: await status_msg.delete()
             except: pass
             
@@ -237,7 +231,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             res = requests.get(url, timeout=5).json()
             movies = res.get("results", [])[:3]
             
-            # حذف رسالة التحميل
+            # حذف رسالة الانتظار لتهيئة الشاشة للكروت
             try: await status_msg.delete()
             except: pass
             
@@ -300,7 +294,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = requests.get(url, timeout=5).json()
         results = response.get("results", [])
-        if not results:
+        if not filter(None, results):
             await update.message.reply_text("❌ لم أتمكن من العثور على نتائج، تأكد من صحة الاسم.")
             return
             
@@ -330,7 +324,7 @@ async def startup_event():
         ])
         
         asyncio.create_task(application.updater.start_polling())
-        logger.info("تم إطلاق نسخة بوت فِلْمَه المحدثة بثلاثة خيارات مشاهدة مذهلة!")
+        logger.info("تم تفعيل الكود الأمن المضاد للتعليق بنجاح!")
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
