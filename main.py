@@ -1,7 +1,7 @@
 import os
 import logging
+import asyncio
 import requests
-import threading
 from fastapi import FastAPI
 import uvicorn
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,7 +19,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
 
-# 3. إعداد سيرفر الويب الوهمي لتخطي نظام النوم في Render
+# 3. إعداد سيرفر الويب FastAPI
 app = FastAPI()
 
 @app.get("/")
@@ -103,8 +103,9 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطأ أثناء جلب البيانات من TMDB: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء الاتصال بقاعدة بيانات الأفلام، يرجى المحاولة لاحقاً.")
 
-# 7. دالة تشغيل بوت تليجرام في الخلفية
-def start_bot():
+# 7. الحيلة السحرية: تشغيل البوت عند إقلاع السيرفر داخل نفس الـ Event Loop
+@app.on_event("startup")
+async def startup_event():
     try:
         application = Application.builder().token(BOT_TOKEN).build()
         
@@ -112,17 +113,16 @@ def start_bot():
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
         
-        logger.info("تم تشغيل مستمعات البوت بنجاح...")
-        application.run_polling(close_loop=False)
+        # تهيئة البوت وتشغيل الاستماع بشكل متوافق تماماً مع الـ Async
+        await application.initialize()
+        await application.start()
+        # تشغيل الـ Polling كخلفية غير محظورة داخل نفس الـ loop
+        asyncio.create_task(application.updater.start_polling())
+        logger.info("تم تشغيل مستمعات البوت بنجاح متزامن مع FastAPI!")
     except Exception as e:
-        logger.error(f"خطأ أثناء تشغيل البوت: {e}")
+        logger.error(f"خطأ أثناء تشغيل البوت في الـ startup: {e}")
 
-# 8. تشغيل السيرفر والبوت معاً
+# 8. تشغيل السيرفر الرئيسي
 if __name__ == "__main__":
-    # تشغيل البوت في خيط مستقل كخلفية لعدم حظر المنفذ
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
-    
-    # تشغيل سيرفر الويب في الواجهة الأمامية لرد الـ Live لـ Render
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
