@@ -31,15 +31,14 @@ app = FastAPI()
 def home():
     return "Bot is alive and running!"
 
-# 4. رسالة الترحيب الأصلية والمطورة لبوت فِلْمَه (ترتيب متناسق وجديد للأزرار)
+# 4. رسالة الترحيب الأصلية والمطورة لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه!**\n\n"
-        "بوابتك الذكية لاستكشاف عالم السينما والأفلام والمسلسلات 🍿\n\n"
+        "بوابتك الذكية لاستكشاف عالم السينما ومشاهدة الأفلام والمسلسلات 🍿\n\n"
         "💡 **اضغط على أي زر بالأسفل لتحديد نوع البحث، أو اكتب اسم العمل الذي تريده مباشرة!**"
     )
     
-    # تنسيق وترتيب الأزرار بشكل هندسي مريح للعين على الموبايل
     keyboard = [
         [
             InlineKeyboardButton("🎬 بحث عن فيلم", callback_data="search_movie"), 
@@ -59,18 +58,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
 
-# --- إضافة جديدة: أمر المساعدة والشرح المطور ---
+# أمر المساعدة والشرح المطور
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
-        "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة وسيتم جلب بوستر العمل، قصته، تقييمه، ورابط التريلر الخاص به.\n"
-        "🔹 **البحث المخصص:** استخدم الأزرار بالأسفل لتحديد إذا كنت تبحث عن فيلم فقط أو مسلسل فقط لنتائج أدق.\n"
-        "🔹 **المفضلة:** عند عرض أي عمل، يمكنك ضغط 'إضافة للمفضلة' للوصول للفيلم لاحقاً من قائمتك.\n\n"
+        "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
+        "🔹 **المشاهدة:** سيظهر لك زر '🍿 مشاهدة العمل الآن' يأخذك لسيرفر خارجي آمن وسريع يدعم الترجمة العربية.\n"
+        "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# --- دالة مساعدة لجلب رابط التريلر من TMDB ---
+# دالة مساعدة لجلب رابط التريلر من TMDB
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -82,6 +81,14 @@ def get_trailer_url(media_type, media_id):
     except Exception as e:
         logger.error(f"Error fetching trailer: {e}")
     return None
+
+# --- دالة مطورة لتوليد روابط المشاهدة الخارجية الآمنة تلقائياً ---
+def generate_watch_url(media_type, media_id):
+    # نستخدم سيرفر vidsrc الشهير والآمن كمشغل خارجي ومجاني مستقر للأفلام والمسلسلات
+    if media_type == "movie":
+        return f"https://vidsrc.me/embed/movie?tmdb={media_id}"
+    else:
+        return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
 
 # 5. دالة معالجة الضغط على الأزرار التفاعلية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -133,12 +140,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 result_text = f"🎲 **اقتراح فِلْمَه لك اليوم:**\n\n🎬 **الاسم:** {title} ({year})\n⭐ **التقييم:** {rating}/10\n"
                 
+                # جلب روابط التريلر والمشاهدة الخارجية الافتراضية للفيلم العشوائي
                 trailer = get_trailer_url("movie", movie_id)
+                watch_url = generate_watch_url("movie", movie_id)
                 
-                # ترتيب الأزرار بلمسة جمالية منسقة للنتائج
-                keyboard = []
+                # تنسيق أسطوري للأزرار لتبدو مثل تطبيقات البث العالمية
+                keyboard = [
+                    [InlineKeyboardButton("🍿 مشاهدة الفيلم الآن", url=watch_url)]
+                ]
+                
                 if trailer:
-                    keyboard.append([InlineKeyboardButton("🍿 مشاهدة الإعلان (التريلر)", url=trailer)])
+                    keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer)])
                 
                 keyboard.append([
                     InlineKeyboardButton("📝 قصة العمل", callback_data=f"show_story_movie_{movie_id}"),
@@ -225,12 +237,17 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result_text += f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
         result_text += f"⭐ **التقييم:** {rating}/10\n"
         
+        # جلب روابط التريلر والمشاهدة التلقائية لهذا العمل بعينه
         trailer_url = get_trailer_url(actual_media_type, media_id)
+        watch_url = generate_watch_url(actual_media_type, media_id)
         
-        # الترتيب المتناسق للأزرار تحت النتيجة
-        keyboard = []
+        # الترتيب الاحترافي الجديد للأزرار: زر المشاهدة في المقدمة وكبير
+        keyboard = [
+            [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
+        ]
+        
         if trailer_url:
-            keyboard.append([InlineKeyboardButton("🍿 مشاهدة الإعلان (التريلر)", url=trailer_url)])
+            keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
             
         keyboard.append([
             InlineKeyboardButton("📝 قصة العمل", callback_data=f"show_story_{actual_media_type}_{media_id}"),
@@ -248,17 +265,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Search error: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء الاتصال بالخادم.")
 
-# 7. تشغيل البوت متزامن مع FastAPI وتثبيت أزرار قائمة الـ Menu برمجياً تلقائياً
+# 7. تشغيل البوت متزامن مع FastAPI
 @app.on_event("startup")
 async def startup_event():
     try:
         application = Application.builder().token(BOT_TOKEN).build()
         
         application.add_handler(CommandHandler("start", start))
-        # إضافة المعالج الخاص بأمر المساعدة الجديد
         application.add_handler(CommandHandler("help", help_command))
-        # تفعيل أوامر الـ Menu من الكود مباشرة لتعمل برمجياً دون تعليق
-        application.add_handler(CommandHandler("top", lambda u, c: button_handler(u, c) if False else u.message.reply_text("اضغط على زر أفضل الأفلام من /start حالياً")))
         
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
@@ -266,15 +280,14 @@ async def startup_event():
         await application.initialize()
         await application.start()
         
-        # --- إضافة أسطورية: تحديث وتعديل أزرار القائمة الجانبية (Menu) بشكل متناسق ومطابق للصورة تلقائياً ---
+        # تحديث الأزرار الجانبية للمنيو
         await application.bot.set_my_commands([
             BotCommand("start", "🚀 تشغيل البوت والتحكم الرئيسي"),
-            BotCommand("top", "⭐ أفضل الأفلام تقييماً حالياً"),
             BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
         
         asyncio.create_task(application.updater.start_polling())
-        logger.info("تم تشغيل البوت وتحديث قائمة الأوامر بنجاح!")
+        logger.info("تم إطلاق بوت فِلْمَه المطور مع ميزة المشاهدة الآمنة والتريلر نجاح!")
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
