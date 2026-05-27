@@ -135,7 +135,6 @@ async def send_movie_card(context, chat_id, movie):
 
 # --- 🛠️ نظام تصفح الصفحات المطور والمصلح بالكامل لمنع التعليق وجلب نتائج حقيقية 🛠️ ---
 async def fetch_and_show_results(context, chat_id, query, page):
-    # نضمن الاحتفاظ بنوع البحث الحالي والافتراضي هو multi لضمان جلب مسلسلات وأفلام سوياً لتوسيع النطاق
     search_type = context.user_data.get('search_type', 'multi')
     
     url = (
@@ -296,7 +295,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_page = int(data.split("_")[1])
         search_query = context.user_data.get('search_query', '')
         if search_query:
-            # مسح الرسالة التوجيهية الحالية لعدم تكرار التكديس بالقروب
             try: await query.message.delete()
             except: pass
             await fetch_and_show_results(context, chat_id, search_query, current_page)
@@ -449,7 +447,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-    # تشغيل نظام التنقل والبحث الموسع والمصلح تلقائياً من الصفحة الأولى
     await fetch_and_show_results(context, update.message.chat_id, search_query, 1)
 
 # 7. تشغيل البوت متزامن بالكامل ومربوط مع FastAPI لـ Render
@@ -464,7 +461,9 @@ async def startup_event():
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_search))
 
+        # --- 🔥 السلاح السري لحل مشكلة الـ Conflict وطرد النسخ المعلقة تلقائياً 🔥 ---
         await application.initialize()
+        await application.bot.delete_webhook(drop_pending_updates=True) 
         await application.start()
 
         await application.bot.set_my_commands([
@@ -473,8 +472,8 @@ async def startup_event():
             BotCommand("admin", "👑 لوحة الإدارة للمشرف")
         ])
 
-        asyncio.create_task(application.updater.start_polling())
-        logger.info("تم تفعيل الكود الأمن المضاد للتعليق بنجاح!")
+        asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
+        logger.info("تم طرد كافة الاتصالات القديمة وتفعيل الكود بنجاح ونظافة!")
 
     except Exception as e:
         logger.error(f"Startup error: {e}")
