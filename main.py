@@ -96,13 +96,13 @@ async def send_movie_card(context, chat_id, movie):
 
         keyboard = []
 
-        # إذا كان الفيلم مرفوعاً وموجهاً داخل البوت سابقاً، يظهر زر التحميل المباشر في أول الكرت
+        # إذا كان الفيلم مرفوعاً وموجهاً داخل البوت سابقاً، يظهر زر التحميل المباشر
         if movie_id in LOCAL_MOVIES:
             keyboard.append([InlineKeyboardButton("📥 تحميل ومشاهدة مباشرة (تليجرام)", callback_data=f"dl_{movie_id}")])
 
         keyboard.append([InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)])
 
-        # زر الربط السريع الذكي للمشرف (يظهر لك أنت فقط لتسهيل الإدارة والرفع)
+        # زر الربط السريع الذكي للمشرف
         if chat_id == ADMIN_ID:
             keyboard.append([InlineKeyboardButton("🔗 ربط فيديو بهذا الفيلم فوراً", callback_data=f"quick_bind_{movie_id}")])
 
@@ -133,37 +133,53 @@ async def send_movie_card(context, chat_id, movie):
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
-# --- نظام البحث الموسع والصفحات المطور لمنع الكراش والتكرار ---
+# --- 🛠️ نظام تصفح الصفحات المطور والمصلح بالكامل لمنع التعليق وجلب نتائج حقيقية 🛠️ ---
 async def fetch_and_show_results(context, chat_id, query, page):
+    # نضمن الاحتفاظ بنوع البحث الحالي والافتراضي هو multi لضمان جلب مسلسلات وأفلام سوياً لتوسيع النطاق
     search_type = context.user_data.get('search_type', 'multi')
+    
     url = (
         f"https://api.themoviedb.org/3/search/{search_type}"
         f"?api_key={TMDB_API_KEY}"
-        f"&query={query}"
+        f"&query={requests.utils.quote(query)}"
         f"&language=ar"
         f"&page={page}"
     )
     try:
-        res = requests.get(url, timeout=5).json()
+        response = requests.get(url, timeout=5)
+        res = response.json()
         results = res.get("results", [])
+        total_pages = res.get("total_pages", 1)
         
         if not results:
-            await context.bot.send_message(chat_id, "❌ لم أتمكن من العثور على نتائج إضافية.")
+            await context.bot.send_message(chat_id, "❌ لم أتمكن من العثور على نتائج إضافية لهذا البحث.")
             return
 
-        # عرض النتيجة الحالية بناءً على رقم الصفحة التفاعلية
+        # إرسال كرت النتيجة الحالية بناء على الصفحة المطلوبة
         await send_movie_card(context, chat_id, results[0])
         
-        # أزرار التنقل الذكية بالصفحات
-        keyboard = [[InlineKeyboardButton("➡️ الصفحة التالية", callback_data=f"page_{page + 1}")]]
+        # بناء أزرار تحكم الصفحات بشكل متناسق ومضمون العمل
+        keyboard = []
+        nav_row = []
+        
         if page > 1:
-            keyboard[0].insert(0, InlineKeyboardButton("⬅️ السابقة", callback_data=f"page_{page - 1}"))
+            nav_row.append(InlineKeyboardButton("⬅️ السابقة", callback_data=f"page_{page - 1}"))
+        if page < total_pages:
+            nav_row.append(InlineKeyboardButton("➡️ الصفحة التالية", callback_data=f"page_{page + 1}"))
+            
+        if nav_row:
+            keyboard.append(nav_row)
+            
         keyboard.append([InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu")])
             
-        await context.bot.send_message(chat_id, f"📄 صفحة البحث الحالية: {page}", reply_markup=InlineKeyboardMarkup(keyboard))
+        await context.bot.send_message(
+            chat_id, 
+            f"📄 صفحة البحث الحالية: {page} من {total_pages}", 
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     except Exception as e:
-        logger.error(f"Search error in pagination: {e}")
-        await context.bot.send_message(chat_id, "⚠️ حدث خطأ أثناء جلب النتائج من الخادم.")
+        logger.error(f"Search error in pagination core: {e}")
+        await context.bot.send_message(chat_id, "⚠️ حدث خطأ أثناء الاتصال بخوادم الفهرسة.")
 
 # 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,7 +187,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه!**\n\n"
         "بوابتك الذكية لاستكشاف عالم السينما ومشاهدة الأفلام والمسلسلات 🍿\n\n"
-        "💡 **اضغط على أي زر بالأسفل لتحديد نوع البحث, أو اكتب اسم العمل الذي تريده مباشرة!**"
+        "💡 **اضغط على أي زر بالأسفل لتحديد نوع البحث، أو اكتب اسم العمل الذي تريده مباشرة!**"
     )
 
     keyboard = [
@@ -233,11 +249,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.effective_message.reply_text("👑 **مرحباً بك في لوحة الإدارة المتكاملة:**\nاختر وظيفة للتحكم بالبوت:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-# معالج استقبال الإجراءات الإدارية الخاصة بك (الإذاعة والرفع الذكي)
+# معالج استقبال الإجراءات الإدارية الخاصة بك
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = context.user_data.get("admin_action")
     
-    # 1. حالة إذاعة الرسالة لكل المشتركين
     if action == "broadcasting":
         text_to_send = update.message.text
         context.user_data["admin_action"] = None
@@ -249,17 +264,13 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             except: pass
         await update.message.reply_text(f"✅ تم إرسال الرسالة بنجاح إلى {count} مشترك!")
         
-    # 2. حالة استقبال الفيديو الموجه (Forward) بالربط التلقائي بلمسة واحدة
     elif action == "upload_waiting_video":
         if update.message.video:
             file_id = update.message.video.file_id
             tmdb_id = context.user_data.get("temp_bind_id")
-            
-            # حفظ الربط مباشرة في الذاكرة
             LOCAL_MOVIES[str(tmdb_id)] = file_id
             context.user_data["admin_action"] = None
             context.user_data["temp_bind_id"] = None
-            
             await update.message.reply_text(f"✅ تم ربط الفيديو بالعمل السينمائي بنجاح وبخطوة واحدة!")
         else:
             await update.message.reply_text("❌ عذراً، قم بتوجيه (Forward) مقطع فيديو حصراً لإتمام عملية الربط بنجاح.")
@@ -273,7 +284,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat_id
     data = query.data
 
-    # حفظ المستخدم تلقائياً للإحصائيات
     BOT_USERS.add(user_id)
 
     if data == "main_menu":
@@ -281,10 +291,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
         await start(update, context)
 
+    # إصلاح معالجة زر الصفحة ومتابعة البحث الفعلي المحدث
     elif data.startswith("page_"):
         current_page = int(data.split("_")[1])
         search_query = context.user_data.get('search_query', '')
-        await fetch_and_show_results(context, chat_id, search_query, current_page)
+        if search_query:
+            # مسح الرسالة التوجيهية الحالية لعدم تكرار التكديس بالقروب
+            try: await query.message.delete()
+            except: pass
+            await fetch_and_show_results(context, chat_id, search_query, current_page)
+        else:
+            await query.message.reply_text("❌ انتهت صلاحية جلسة البحث، أرسل اسم العمل مجدداً.")
 
     # --- أزرار لوحة تحكم الإدارة ---
     elif data == "admin_stats":
@@ -304,14 +321,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🔄 جاري إعادة تشغيل النظام وإنعاش السيرفر...")
         os._exit(0)
 
-    # زر استقبال طلب الربط الفوري من الكرت للمشرف
     elif data.startswith("quick_bind_"):
         target_id = data.split("_")[2]
         context.user_data["admin_action"] = "upload_waiting_video"
         context.user_data["temp_bind_id"] = target_id
         await query.message.reply_text(f"📥 البوت جاهز لربط العمل ذو الرقم: `{target_id}`\nقم الآن بعمل **Forward** للفيلم إلى هنا مباشرة ليتم ربطه فوراً!")
 
-    # تنفيذ التحميل والإرسال المباشر للمستخدمين من خوادم تليجرام
     elif data.startswith("dl_"):
         m_id = data.split("_")[1]
         f_id = LOCAL_MOVIES.get(m_id)
@@ -422,7 +437,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     BOT_USERS.add(update.effective_user.id)
     
-    # تحقق آمن لمنع تداخل الرسائل العادية مع إجراءات الإدارة المفتوحة (الإذاعة / الرفع السريع بالفورورد)
     if update.effective_user.id == ADMIN_ID and context.user_data.get("admin_action"):
         await handle_admin_actions(update, context)
         return
@@ -435,7 +449,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-    # تشغيل نظام التنقل والبحث الموسع تلقائياً من الصفحة الأولى
+    # تشغيل نظام التنقل والبحث الموسع والمصلح تلقائياً من الصفحة الأولى
     await fetch_and_show_results(context, update.message.chat_id, search_query, 1)
 
 # 7. تشغيل البوت متزامن بالكامل ومربوط مع FastAPI لـ Render
@@ -448,8 +462,6 @@ async def startup_event():
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("admin", admin_panel))
         application.add_handler(CallbackQueryHandler(button_handler))
-        
-        # استخدام filter.ALL لضمان جلب جميع أنواع الميديا (الفيديو) الموجه للوحة التحكم بشكل صحيح
         application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_search))
 
         await application.initialize()
@@ -458,7 +470,7 @@ async def startup_event():
         await application.bot.set_my_commands([
             BotCommand("start", "🚀 تشغيل البوت والتحكم الرئيسي"),
             BotCommand("help", "🔍 شرح طريقة استخدام البوت"),
-            BotCommand("admin", "👑 لوحة الإدارة للمشرف (خاصة بك)")
+            BotCommand("admin", "👑 لوحة الإدارة للمشرف")
         ])
 
         asyncio.create_task(application.updater.start_polling())
