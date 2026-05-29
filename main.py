@@ -15,35 +15,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والمعرفات الخاصة بك
+# 2. الإعدادات والمعرفات الأساسية
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = 1436656132
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "36214571cc6d6b8b0e78453a57cc49ae")
 
-# بيانات الحساب المساعد الخاص بك
+# بيانات الحساب المساعد (Userbot)
 API_ID = 37617537
 API_HASH = "453a57cc49aed64b6ebbfd1eb11645da"
 
-# مصادر قنوات الأفلام العامة
+# مصادر قنوات الأفلام المستهدفة لقش الفيديوهات
 MOVIE_CHANNELS = ["wecimaR", "HI_VZ", "jdjdiso0", "runawayz1"]
 
-# الذاكرة المؤقتة لحفظ حالات الجلسات والبحث
+# الذاكرة المؤقتة لحفظ الحالات والمستخدمين
 BOT_USERS = set()
 USER_SEARCHES = {} 
 SESSION_DATA = {"phone_code_hash": None, "phone": None}
 
-# 3. إعداد سيرفر الويب FastAPI لمنع إغلاق السيرفر في Render
+# 3. إعداد سيرفر FastAPI لمنع إغلاق السيرفر في Render
 app = FastAPI()
 
 @app.get("/")
 @app.head("/")
 def home():
-    return "Filmh Hybrid Bot is perfectly alive!"
+    return "Filmh Universal Hybrid Bot is perfectly alive!"
 
-# 4. إعداد الحساب المساعد (بدون تشغيل تلقائي لتفادي الأخطاء)
+# 4. إعداد الحساب المساعد (بدون إقلاع تلقائي لتجنب أخطاء السيرفر الميت)
 userbot = Client("filmh_userbot", api_id=API_ID, api_hash=API_HASH, in_memory=False)
 
-# 5. دالة البحث في الـ API (TMDB) لجلب البوستر والقصة
+# ==========================================
+# 💾 إعادة وتأمين كافة الدوال القديمة لموقع الأفلام بالكامل
+# ==========================================
+
 def search_tmdb(query_text):
     try:
         url = f"https://api.themoviedb.org/3/search/multi?api_key={TMDB_API_KEY}&query={query_text}&language=ar"
@@ -53,10 +56,31 @@ def search_tmdb(query_text):
         logger.error(f"TMDB API Error: {e}")
         return []
 
-# 6. محرك قش الرسائل من قنوات تليجرام عبر الـ Userbot
+def get_movie_details(movie_id, media_type="movie"):
+    """دالة جلب تفاصيل العمل الإضافية من السورس القديم"""
+    try:
+        url = f"https://api.themoviedb.org/3/{media_type}/{movie_id}?api_key={TMDB_API_KEY}&language=ar&append_to_response=credits,videos"
+        return requests.get(url).json()
+    except Exception as e:
+        logger.error(f"Error fetching detailed movie data: {e}")
+        return {}
+
+def get_trending_movies():
+    """دالة جلب الأفلام التريند اليومية من السورس القديم"""
+    try:
+        url = f"https://api.themoviedb.org/3/trending/all/day?api_key={TMDB_API_KEY}&language=ar"
+        response = requests.get(url).json()
+        return response.get("results", [])
+    except Exception as e:
+        logger.error(f"Trending fetch error: {e}")
+        return []
+
+# ==========================================
+# 📡 محرك البحث وقش الرسائل السحابي الجديد (Userbot)
+# ==========================================
+
 async def search_movies_in_channels(query_text):
     found_messages = []
-    # نتأكد أن الحساب المساعد متصل ومسجل دخول أولاً
     if not userbot.is_initialized:
         return found_messages
     try:
@@ -65,7 +89,7 @@ async def search_movies_in_channels(query_text):
             
         for channel in MOVIE_CHANNELS:
             try:
-                async range_msg in userbot.search_messages(chat_id=channel, query=query_text, limit=5):
+                async for message in userbot.search_messages(chat_id=channel, query=query_text, limit=5):
                     if message.video or message.document or message.text:
                         found_messages.append({
                             "channel": channel,
@@ -78,7 +102,10 @@ async def search_movies_in_channels(query_text):
         logger.error(f"Global Userbot search error: {e}")
     return found_messages
 
-# --- 🛠️ نظام تصفح الصفحات الهجين والمطابق للتصميم الهندسي المطلوب 🛠️ ---
+# ==========================================
+# 🛠️ نظام تصفح الصفحات الهندسي والمطور 
+# ==========================================
+
 async def show_page_results(context, chat_id, user_id, page):
     results = USER_SEARCHES.get(user_id, {})
     tmdb_results = results.get("tmdb", [])
@@ -90,17 +117,18 @@ async def show_page_results(context, chat_id, user_id, page):
         await context.bot.send_message(chat_id, "❌ لا توجد صفحات أخرى للعرض.")
         return
 
-    caption_text = "🎬 **نتائج بحث فِلْمَه الذكية:**\n\n"
+    caption_text = "🎬 **نتائج بحث فِلْمَه الذكية والشاملة:**\n\n"
     poster_url = None
 
     if page <= len(tmdb_results):
         item = tmdb_results[page - 1]
+        media_type = item.get("media_type", "movie")
         title = item.get("title") or item.get("name") or "عنوان غير معروف"
-        overview = item.get("overview") or "لا يوجد وصف متوفر حالياً لهذا العمل."
+        overview = item.get("overview") or "لا يوجد وصف متوفر حالياً لهذا العمل السينمائي."
         rate = item.get("vote_average", "غير مقيم")
         date = item.get("release_date") or item.get("first_air_date") or "غير معروف"
         
-        caption_text += f"📌 **الاسم:** {title}\n🗓️ **التاريخ:** {date}\n⭐️ **التقييم:** {rate}/10\n\n📝 **القصة:**\n_{overview}_\n\n"
+        caption_text += f"📌 **الاسم:** {title}\n🗂️ **النوع:** {media_type}\n🗓️ **التاريخ:** {date}\n⭐️ **التقييم:** {rate}/10\n\n📝 **القصة:**\n_{overview}_\n\n"
         if item.get("poster_path"):
             poster_url = f"https://image.tmdb.org/t/p/w500{item.get('poster_path')}"
     else:
@@ -142,36 +170,36 @@ async def show_page_results(context, chat_id, user_id, page):
     
     await context.bot.send_message(chat_id=chat_id, text=f"📄 صفحة البحث الحالية: {page} من {total_pages}")
 
-# 7. دالة الترحيب الأصلية
+# ==========================================
+# 🚀 الدوال التفاعلية الأساسية وأوامر البوت
+# ==========================================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     BOT_USERS.add(update.effective_user.id)
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه الهجين المطور!**\n\n"
-        "النظام الأقوى الذي يدمج بين قاعدة بيانات الأفلام العالمية وقش ملفات التليجرام السحابية المباشرة 🍿\n\n"
-        "💡 **اكتب اسم أي فيلم أو مسلسل، وسأجلب لك تفاصيله فوراً!**"
+        "النظام الأقوى الذي يدمج بين قاعدة بيانات الأفلام العالمية وقش ملفات تليجرام السحابية المباشرة 🍿\n\n"
+        "💡 **اكتب اسم أي فيلم أو مسلسل، وسأجلب لك تفاصيله وملفاته فوراً!**"
     )
     keyboard = [
         [InlineKeyboardButton("🔍 ابدأ البحث المباشر", callback_data="trigger_search")],
+        [InlineKeyboardButton("🔥 أعمال تريند اليوم", callback_data="view_trending")],
         [InlineKeyboardButton("📊 إحصائيات البوت", callback_data="bot_stats")]
     ]
     await update.effective_message.reply_text(welcome, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# --- 📱 نظام الـ Login الداخلي والمختصر لتفعيل الحساب المساعد 📱 ---
 async def admin_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
         return
-    
     context.user_data["login_step"] = "waiting_phone"
-    await update.message.reply_text("📱 **مرحباً بك في نظام التفعيل السريع!**\n\nأرسل الآن رقم هاتف الحساب المساعد مع رمز الدولة كاملاً.\nمثال: `+9665xxxxxxxx`")
+    await update.message.reply_text("📱 **مرحباً بك في نظام التفعيل السريع للمشرف!**\n\nأرسل الآن رقم هاتف الحساب المساعد مع رمز الدولة كاملاً.\nمثال: `+9665xxxxxxxx`")
 
 async def handle_admin_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    chat_id = update.message.chat_id
     text = update.message.text
 
     if user_id != ADMIN_ID:
-        # إذا لم يكن الآدمن، نعتبر الرسالة بحث عادي عن الأفلام
         await handle_search(update, context)
         return
 
@@ -203,10 +231,8 @@ async def handle_admin_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text(f"❌ الكود خاطئ أو انتهت صلاحيته:\n`{e}`\n\nأرسل /login للبدء من جديد.")
         context.user_data["login_step"] = None
     else:
-        # إذا لم يكن هناك خطوة تسجيل دخول، يتم التعامل مع النص كبحث عن الأفلام
         await handle_search(update, context)
 
-# 8. دالة استقبال مدخلات البحث عن الأفلام
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.message.chat_id
@@ -227,7 +253,10 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     USER_SEARCHES[user_id] = {"tmdb": tmdb_results, "tg": tg_results}
     await show_page_results(context, chat_id, user_id, 1)
 
-# 9. معالج الأزرار والتنقل والتوجيه
+# ==========================================
+# 🎛️ معالجة نقرات الأزرار والتحكم التفاعلي
+# ==========================================
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -237,13 +266,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "main_menu" or data == "trigger_search":
         await start(update, context)
+        
+    elif data == "view_trending":
+        trending = get_trending_movies()
+        if trending:
+            USER_SEARCHES[user_id] = {"tmdb": trending, "tg": []}
+            await show_page_results(context, chat_id, user_id, 1)
+        else:
+            await query.message.reply_text("⚠️ تعذر جلب أعمال التريند حالياً.")
+            
     elif data == "bot_stats":
-        await query.message.reply_text(f"📊 **إحصائيات فِلْمَه:**\n\n👥 عدد المشتركين النشطين: `{len(BOT_USERS)}` مستخدم.\n📡 نظام البحث: هجين ومستقر.")
+        await query.message.reply_text(f"📊 **إحصائيات فِلْمَه:**\n\n👥 عدد المشتركين النشطين: `{len(BOT_USERS)}` مستخدم.\n📡 نظام البحث: هجين ومدمج بالكامل.")
+        
     elif data.startswith("hybrid_page_"):
         next_page = int(data.split("_")[2])
         try: await query.message.delete()
         except: pass
         await show_page_results(context, chat_id, user_id, next_page)
+        
     elif data.startswith("get_tg_"):
         idx = int(data.split("_")[2])
         results = USER_SEARCHES.get(user_id, {}).get("tg", [])
@@ -257,7 +297,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text("❌ انتهت صلاحية هذه الجلسة.")
 
-# 10. تشغيل البوت الرسمي عند إقلاع السيرفر
+# ==========================================
+# ⚙️ إقلاع وتدشين التطبيق بالكامل
+# ==========================================
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -275,7 +318,7 @@ async def startup_event():
             BotCommand("login", "📱 تفعيل الحساب المساعد (للمشرف فقط)")
         ])
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("Main Bot Application is running. Awaiting /login from admin.")
+        logger.info("Main Bot Application is running. All old functions preserved.")
     except Exception as e:
         logger.error(f"Main application crash: {e}")
 
