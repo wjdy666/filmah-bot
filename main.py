@@ -133,7 +133,7 @@ async def send_movie_card(context, chat_id, movie):
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
-# --- 🛠️ نظام تصفح الصفحات المطور والمصلح بالكامل لمنع التعليق وجلب نتائج حقيقية 🛠️ ---
+# --- 🛠️ نظام تصفح الصفحات المطور والمطابق للتصميم المطلوب تماماً 🛠️ ---
 async def fetch_and_show_results(context, chat_id, query, page):
     search_type = context.user_data.get('search_type', 'multi')
     
@@ -157,14 +157,15 @@ async def fetch_and_show_results(context, chat_id, query, page):
         # إرسال كرت النتيجة الحالية بناء على الصفحة المطلوبة
         await send_movie_card(context, chat_id, results[0])
         
-        # بناء أزرار تحكم الصفحات بشكل متناسق ومضمون العمل
+        # بناء أزرار تحكم الصفحات بشكل متناسق ومطابق للصورة المطلوبة
         keyboard = []
         nav_row = []
         
-        if page > 1:
-            nav_row.append(InlineKeyboardButton("⬅️ السابقة", callback_data=f"page_{page - 1}"))
+        # الترتيب الهندسي: الصفحة التالية على اليمين، والسابقة على اليسار
         if page < total_pages:
-            nav_row.append(InlineKeyboardButton("➡️ الصفحة التالية", callback_data=f"page_{page + 1}"))
+            nav_row.append(InlineKeyboardButton("الصفحة التالية ➡️", callback_data=f"page_{page + 1}"))
+        if page > 1:
+            nav_row.append(InlineKeyboardButton("السابقة ⬅️", callback_data=f"page_{page - 1}"))
             
         if nav_row:
             keyboard.append(nav_row)
@@ -484,3 +485,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000))
     )
+
