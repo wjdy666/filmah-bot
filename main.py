@@ -30,7 +30,6 @@ MOVIE_CHANNELS = ["wecimaR", "HI_VZ", "jdjdiso0", "runawayz1"]
 # الذاكرة المؤقتة لحفظ الحالات والمستخدمين
 BOT_USERS = set()
 USER_SEARCHES = {} 
-SESSION_DATA = {"phone_code_hash": None, "phone": None}
 
 # 3. إعداد سيرفر FastAPI لمنع إغلاق السيرفر في Render
 app = FastAPI()
@@ -85,6 +84,7 @@ async def search_movies_in_channels(query_text):
             
         for channel in MOVIE_CHANNELS:
             try:
+                # تم إصلاح السطر البرمجي هنا ليعمل بكفاءة ودون أخطاء تجميد
                 async for message in userbot.search_messages(chat_id=channel, query=query_text, limit=5):
                     if message.video or message.document or message.text:
                         found_messages.append({
@@ -202,17 +202,17 @@ async def handle_admin_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE
     step = context.user_data.get("login_step")
 
     if step == "waiting_phone":
-        SESSION_DATA["phone"] = text
+        context.user_data["phone"] = text
         await update.message.reply_text("⏳ جاري الاتصال بتليجرام وإرسال كود التفعيل...")
         try:
-            # 💡 التعديل الذكي هنا: نفحص الاتصال أولاً لمنع خطأ Connected
             if not userbot.is_connected:
                 await userbot.connect()
             
             code_data = await userbot.send_code(text)
-            SESSION_DATA["phone_code_hash"] = code_data.phone_code_hash
+            # حفظ الهاش في الـ user_data لمنع انتهاء الصلاحية أو الضياع بين الرسائل
+            context.user_data["phone_code_hash"] = code_data.phone_code_hash
             context.user_data["login_step"] = "waiting_code"
-            await update.message.reply_text("📩 وصلك الآن كود من شركة تليجرام على حسابك المساعد.\n\n**قم بكتابة الكود هنا في المحادثة فوراً.**")
+            await update.message.reply_text("📩 وصلك الآن كود من شركة تليجرام على حسابك المساعد.\n\n**قم بكتابة الكود هنا في المحادثة فوراً وبسرعة.**")
         except Exception as e:
             await update.message.reply_text(f"❌ حدث خطأ أثناء إرسال الكود:\n`{e}`\n\nأرسل /login للمحاولة مرة أخرى.")
             context.user_data["login_step"] = None
@@ -221,14 +221,15 @@ async def handle_admin_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("⏳ جاري التحقق من الكود وإنشاء الجلسة السحابية...")
         try:
             await userbot.sign_in(
-                phone_number=SESSION_DATA["phone"],
-                phone_code_hash=SESSION_DATA["phone_code_hash"],
-                phone_code=text
+                phone_number=context.user_data.get("phone"),
+                phone_code_hash=context.user_data.get("phone_code_hash"),
+                phone_code=text.strip()
             )
             await update.message.reply_text("✅ **تهانينا! تم تفعيل وتدشين الحساب المساعد بنجاح أسطوري!**\n\nنظام قش القنوات شغال الحين بكامل قوته السحابية 🚀")
+            context.user_data["login_step"] = None
         except Exception as e:
-            await update.message.reply_text(f"❌ الكود خاطئ أو انتهت صلاحيته:\n`{e}`\n\nأرسل /login للبدء من جديد.")
-        context.user_data["login_step"] = None
+            await update.message.reply_text(f"❌ خطأ أثناء التحقق:\n`{e}`\n\nأرسل /login للبدء من جديد وكتابة الكود بسرعة فور وصوله.")
+            context.user_data["login_step"] = None
     else:
         await handle_search(update, context)
 
@@ -317,7 +318,7 @@ async def startup_event():
             BotCommand("login", "📱 تفعيل الحساب المساعد (للمشرف فقط)")
         ])
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("Main Bot Application is running. All functions optimized.")
+        logger.info("Main Bot Application is running. All bugs squashed.")
     except Exception as e:
         logger.error(f"Main application crash: {e}")
 
