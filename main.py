@@ -40,11 +40,11 @@ app = FastAPI()
 def home():
     return "Filmh Universal Hybrid Bot is perfectly alive!"
 
-# 4. إعداد الحساب المساعد (بدون إقلاع تلقائي لتجنب أخطاء السيرفر الميت)
+# 4. إعداد الحساب المساعد
 userbot = Client("filmh_userbot", api_id=API_ID, api_hash=API_HASH, in_memory=False)
 
 # ==========================================
-# 💾 إعادة وتأمين كافة الدوال القديمة لموقع الأفلام بالكامل
+# 💾 الدوال القديمة لموقع الأفلام بالكامل
 # ==========================================
 
 def search_tmdb(query_text):
@@ -57,7 +57,6 @@ def search_tmdb(query_text):
         return []
 
 def get_movie_details(movie_id, media_type="movie"):
-    """دالة جلب تفاصيل العمل الإضافية من السورس القديم"""
     try:
         url = f"https://api.themoviedb.org/3/{media_type}/{movie_id}?api_key={TMDB_API_KEY}&language=ar&append_to_response=credits,videos"
         return requests.get(url).json()
@@ -66,7 +65,6 @@ def get_movie_details(movie_id, media_type="movie"):
         return {}
 
 def get_trending_movies():
-    """دالة جلب الأفلام التريند اليومية من السورس القديم"""
     try:
         url = f"https://api.themoviedb.org/3/trending/all/day?api_key={TMDB_API_KEY}&language=ar"
         response = requests.get(url).json()
@@ -76,13 +74,11 @@ def get_trending_movies():
         return []
 
 # ==========================================
-# 📡 محرك البحث وقش الرسائل السحابي الجديد (Userbot)
+# 📡 محرك البحث وقش الرسائل السحابي (Userbot)
 # ==========================================
 
 async def search_movies_in_channels(query_text):
     found_messages = []
-    if not userbot.is_initialized:
-        return found_messages
     try:
         if not userbot.is_connected:
             await userbot.start()
@@ -147,7 +143,7 @@ async def show_page_results(context, chat_id, user_id, page):
     if has_tg_file:
         keyboard.append([InlineKeyboardButton("📥 مشاهدة وتحميل مباشر (داخل تليجرام)", callback_data=f"get_tg_{page-1}")])
     else:
-        keyboard.append([InlineKeyboardButton("🌐 جاري البحث عن سيرفرات مشاهدة خارجية...", callback_data="no_file")])
+        keyboard.append([InlineKeyboardButton("🌐 جاري البحث عن سيرفرات خارجية...", callback_data="no_file")])
     
     nav_row = []
     if page < total_pages:
@@ -209,7 +205,10 @@ async def handle_admin_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE
         SESSION_DATA["phone"] = text
         await update.message.reply_text("⏳ جاري الاتصال بتليجرام وإرسال كود التفعيل...")
         try:
-            await userbot.connect()
+            # 💡 التعديل الذكي هنا: نفحص الاتصال أولاً لمنع خطأ Connected
+            if not userbot.is_connected:
+                await userbot.connect()
+            
             code_data = await userbot.send_code(text)
             SESSION_DATA["phone_code_hash"] = code_data.phone_code_hash
             context.user_data["login_step"] = "waiting_code"
@@ -247,7 +246,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
     if not tmdb_results and not tg_results:
-        await update.message.reply_text("❌ عذراً، لم أجد هذا العمل حالياً لا في الموقع ولا في قنوات التليجرام المربوطة.")
+        await update.message.reply_text("❌ عذراً، لم أجد هذا العمل حالياً.")
         return
 
     USER_SEARCHES[user_id] = {"tmdb": tmdb_results, "tg": tg_results}
@@ -318,7 +317,7 @@ async def startup_event():
             BotCommand("login", "📱 تفعيل الحساب المساعد (للمشرف فقط)")
         ])
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("Main Bot Application is running. All old functions preserved.")
+        logger.info("Main Bot Application is running. All functions optimized.")
     except Exception as e:
         logger.error(f"Main application crash: {e}")
 
