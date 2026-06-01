@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والرموز الأساسية (تم تعديل التوكن ليعتمد بالكامل على متغيرات البيئة لضمان الأمان)
+# 2. الإعدادات والرموز الأساسية
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
@@ -23,7 +23,7 @@ ADMIN_ID = 1436656132
 # ذاكرة مؤقتة للمفضلة تعتمد على معرف المستخدم (ID)
 USER_FAVORITES = {}
 
-# قائمة تصنيفات الأفلام الكاملة والموسعة (بدون أي نقص)
+# قائمة تصنيفات الأفلام الكاملة والموسعة
 GENRES = {
     "action": {"id": 28, "name": "💥 أكشن"},
     "adventure": {"id": 12, "name": "🤠 مغامرة"},
@@ -39,7 +39,7 @@ GENRES = {
     "thriller": {"id": 53, "name": "🥶 إثارة وتشويق"}
 }
 
-# 3. إعداد سيرفر الويب FastAPI للحفاظ على استقرار السيرفر من النوم
+# 3. إعداد سيرفر الويب FastAPI
 app = FastAPI()
 
 @app.get("/")
@@ -47,7 +47,7 @@ app = FastAPI()
 def home():
     return "Filmah Bot is fully and smoothly running!"
 
-# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB بشكل آمن لمنع التعليق
+# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -60,7 +60,7 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً وتجنب الروابط المعطلة
+# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً
 def generate_watch_servers(media_type, media_id):
     path = "movie" if media_type == "movie" else "tv"
     return {
@@ -133,7 +133,6 @@ async def send_movie_card(context, chat_id, movie):
 
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
-
 # 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
@@ -174,7 +173,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
         "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
-        "🔹 **المشاهدة:** سيظهر لك زر '🍿 مشاهدة العمل الآن' يأخذك لسيرفر خارجي يدعم الترجمة العربية.\n"
+        "🔹 **المشاهدة:** سيظهر لك خيارات سيرفرات متعددة تدعم الترجمة العربية.\n"
         "💡 _تنويه للمشاهدة:_ لتجربة خالية من الإعلانات المنبثقة المزعجة، يفضل فتح روابط المشاهدة عبر متصفح يدعم حظر الإعلانات مثل **Brave**.\n"
         "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
@@ -305,7 +304,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
         await start(update, context)
 
-# 6. دالة استقبال نصوص البحث والربط الشامل بالبطاقات والبوسترات
+# 6. دالة استقبال نصوص البحث
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text
     search_type = context.user_data.get('search_type', 'multi')
@@ -347,7 +346,6 @@ async def startup_event():
             BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
 
-        # مضاف هنا كود طرد الطلبات القديمة المتراكمة تلقائياً لمنع الـ Conflict نهائياً
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
         logger.info("تم تفعيل الكود الآمن وتجاوز التعليق بنجاح!")
     except Exception as e:
