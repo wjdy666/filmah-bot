@@ -3,11 +3,15 @@ import logging
 import asyncio
 import random
 import requests
+import re
 from fastapi import FastAPI
 import uvicorn
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
-from pyrogram import Client
+
+# استيراد مكتبة الحساب المساعد للتشغيل المتوازي بالخلفية
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 # 1. إعدادات الـ Logs لمراقبة الأداء بدقة وثبات
 logging.basicConfig(
@@ -16,20 +20,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والرموز الأساسية
+# 2. الإعدادات والرموز الأساسية للبوت وموقع الأفلام
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
 
-# إعدادات الحساب المساعد الذكي (Userbot) لقش القنوات بالتوازي
-API_ID = int(os.environ.get("API_ID", 37617537))
-API_HASH = os.environ.get("API_HASH", "453a57cc49aed64b6ebbfd1eb11645da")
-SESSION_STRING = os.environ.get("STRING_SESSION", None)
-MOVIE_CHANNELS = ["wecimaR", "HI_VZ", "jdjdiso0", "runawayz1"]
+# إعدادات الحساب المساعد (تشتغل بالخلفية تماماً وبدون أزرار تسجيل دخول)
+API_ID = int(os.environ.get("API_ID", 1234567))  # ضع الـ API ID في ريندر
+API_HASH = os.environ.get("API_HASH", "your_api_hash_here")  # ضع الـ API HASH في ريندر
+SESSION_STRING = os.environ.get("SESSION_STRING")  # كود الـ BQ للحساب المساعد المخزن بريندر
 
-# ذاكرة مؤقتة للمفضلة ولربط وتخزين نتائج قش القنوات
+# قنوات الأفلام الأربعة المعتمدة لقش الملفات بالخلفية
+MOVIE_CHANNELS = ["@zaid_films", "@moviem_ar", "@iPhonKat", "@D7_TE"]
+
+# المتغير العام للحساب المساعد
+client_helper = None
+
+# ذاكرة مؤقتة للمفضلة تعتمد على معرف المستخدم (ID)
 USER_FAVORITES = {}
-USER_SEARCHES = {}
 
 # قاموس لمعرفات تصنيفات الأفلام في TMDB
 GENRES = {
@@ -47,18 +55,6 @@ app = FastAPI()
 @app.head("/")
 def home():
     return "Bot is alive and running!"
-
-# تهيئة كائن الـ Userbot بشكل آمن لمنع تعليق خادم Render أثناء الإقلاع
-if SESSION_STRING:
-    userbot = Client("filmh_userbot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
-else:
-    userbot = Client("filmh_userbot", api_id=API_ID, api_hash=API_HASH, in_memory=True)
-
-def user_bot_is_live():
-    try:
-        return userbot.is_connected
-    except:
-        return False
 
 # دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB بشكل آمن لمنع التعليق
 def get_trailer_url(media_type, media_id):
@@ -80,29 +76,36 @@ def generate_watch_url(media_type, media_id):
     else:
         return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
 
-# محرك البحث الذكي المطور لقش ملفات الفيديو المباشرة من قنوات التليجرام المعتمدة بالخلفية
-async def search_movies_in_channels(query_text):
-    found_messages = []
-    if not user_bot_is_live():
-        return found_messages
+# --- دالة قش القنوات بالخلفية عبر الحساب المساعد بدون تدخل المستخدم ---
+async def search_channels_for_file(query_text):
+    global client_helper
+    if not client_helper or not SESSION_STRING:
+        return None
+    
     try:
+        # تنظيف نص البحث للتركيز على الكلمات الأساسية
+        clean_query = re.sub(r'[^\w\s]', '', query_text).strip()
+        if not clean_query:
+            return None
+
         for channel in MOVIE_CHANNELS:
             try:
-                async for message in userbot.search_messages(chat_id=channel, query=query_text, limit=3):
+                # سحب آخر رسائل تحتوي على اسم الفيلم من القناة
+                async for message in client_helper.iter_messages(channel, search=clean_query, limit=5):
+                    # التأكد من أن الرسالة تحتوي على ملف فيديو أو ملف وثائقي
                     if message.video or message.document:
-                        found_messages.append({
-                            "channel": channel,
-                            "msg_id": message.id,
-                            "title": message.caption or "ملف فيديو مباشر"
-                        })
-            except Exception as ce:
-                logger.error(f"Channel {channel} search error: {ce}")
+                        # توليد رابط الرسالة المباشر ليوجه المستخدم لتحميل الفيلم فوراً
+                        channel_username = channel.replace("@", "")
+                        return f"https://t.me/{channel_username}/{message.id}"
+            except Exception as channel_err:
+                logger.error(f"Error searching channel {channel}: {channel_err}")
+                continue
     except Exception as e:
-        logger.error(f"Global Userbot search error: {e}")
-    return found_messages
+        logger.error(f"Global helper search error: {e}")
+    return None
 
 # --- 🌟 الدالة الاحترافية المحمية تماماً من التعليق لإرسال بطاقات الأفلام الهجينة 🌟 ---
-async def send_movie_card(context, chat_id, movie, tg_files=None):
+async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
         actual_media_type = "movie" if "title" in movie else "tv"
@@ -133,15 +136,17 @@ async def send_movie_card(context, chat_id, movie, tg_files=None):
 
         watch_url = generate_watch_url(actual_media_type, movie_id)
 
+        # إنشاء قائمة الأزرار وحفظ مسمياتها الأصلية الكاملة بالملي
         keyboard = []
 
-        # إذا وجد نظام القش الذكي ملفات فيديو متطابقة داخل القنوات، يظهر زر التحميل المباشر فوراً تلقائياً
-        if tg_files:
-            USER_SEARCHES[chat_id] = tg_files
-            keyboard.append([InlineKeyboardButton("📥 مشاهدة وتحميل مباشر (داخل تليجرام)", callback_data=f"get_tg_file_0")])
+        # [تطويرة نظام القش الهجين]: البحث بالخلفية عبر الحساب المساعد عن ملف الفيلم
+        telegram_file_url = await search_channels_for_file(title)
+        if telegram_file_url:
+            # إذا توفر ملف في القنوات، يظهر الزر الذهبي كأول خيار للمستخدم
+            keyboard.append([InlineKeyboardButton("📥 تحميل ومشاهدة مباشرة (ملف التليجرام)", url=telegram_file_url)])
 
+        # إضافة الأزرار الأصلية حقت كودك المعتمد بدون تغيير حرف
         keyboard.append([InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)])
-        keyboard.append([InlineKeyboardButton("🔗 ربط فيديو بهذا العمل فوراً", callback_data=f"link_video_{movie_id}")])
 
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
@@ -170,7 +175,7 @@ async def send_movie_card(context, chat_id, movie, tg_files=None):
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
-# 4. رسالة الترحيب الأصلية لبوت فِلْمَه
+# 4. رسالة الترحيب الأصلية لبوت فِلْمَه (نظيفة وخالية من أزرار الحساب المساعد)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه!**\n\n"
@@ -228,19 +233,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# نظام تفعيل الحساب المساعد واستخراج الـ Session String مباشرة عبر الشات بأمان تفاعلي كامل
-async def login_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
-        return
-    if user_bot_is_live():
-        await update.message.reply_text("✅ الحساب المساعد متصل بالفعل ونظام قش القنوات نشط!")
-        return
-    context.user_data["login_step"] = "phone"
-    await update.message.reply_text("📱 أرسل الآن رقم هاتف الحساب المساعد مع رمز الدولة المباشر.\nمثال: `+966500000000`", parse_mode="Markdown")
-
-# 5. دالة معالجة الضغط على الأزرار التفاعلية
+# 5. دالة معالجة الضغط على الأزرار التفاعلية الأصلية بالملي
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -328,6 +321,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             response = requests.get(url, timeout=5)
             data_res = response.json()
+
             movies = data_res.get("results", [])
 
             try:
@@ -342,8 +336,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             for movie in movies[:3]:
-                tg_files = await search_movies_in_channels(movie.get("title") or movie.get("name", ""))
-                await send_movie_card(context, chat_id, movie, tg_files=tg_files)
+                await send_movie_card(context, chat_id, movie)
 
         except Exception as e:
             logger.error(f"Error fetching genre films: {e}")
@@ -366,6 +359,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             response = requests.get(url, timeout=5)
             data_res = response.json()
+
             movies = data_res.get("results", [])
 
             try:
@@ -380,8 +374,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             for movie in movies[:3]:
-                tg_files = await search_movies_in_channels(movie.get("title") or movie.get("name", ""))
-                await send_movie_card(context, chat_id, movie, tg_files=tg_files)
+                await send_movie_card(context, chat_id, movie)
 
         except Exception as e:
             logger.error(f"Error top rated: {e}")
@@ -404,18 +397,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if results:
                 movie = random.choice(results)
-                tg_files = await search_movies_in_channels(movie.get("title") or movie.get("name", ""))
-                await send_movie_card(context, chat_id, movie, tg_files=tg_files)
+                await send_movie_card(context, chat_id, movie)
 
         except Exception as e:
             logger.error(f"Error random movie: {e}")
-
-    elif data.startswith("link_video_"):
-        movie_id = data.split("_")[2]
-        await query.message.reply_text(
-            f"📥 أرسل ملف الفيديو أو الرابط الآن لربطه بالعمل رقم: `{movie_id}`",
-            parse_mode="Markdown"
-        )
 
     elif data.startswith("add_fav_"):
         media_id = data.split("_")[2]
@@ -475,61 +460,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await start(update, context)
 
-    elif data == "get_tg_file_0":
-        files = USER_SEARCHES.get(chat_id, [])
-        if files:
-            target = files[0]
-            await context.bot.send_message(chat_id, "⏳ جاري سحب وتوجيه ملف العمل لك سحابياً ومباشرة من قنوات تليجرام المعتمدة...")
-            try:
-                await context.bot.forward_message(chat_id=chat_id, from_chat_id=target["channel"], message_id=target["msg_id"])
-            except Exception as fe:
-                logger.error(f"Forward film error: {fe}")
-                await context.bot.send_message(chat_id, "⚠️ تعذر سحب وتوجيه الملف حالياً، يرجى الاستعانة بزر المشاهدة الخارجي.")
-
-# 6. دالة استقبال نصوص البحث والتحقق والربط الشامل بالبطاقات والبوسترات وقش القنوات بالتوازي
-async def handle_message_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text_input = update.message.text
-    step = context.user_data.get("login_step")
-
-    # معالجة خطوات التحقق المباشر عند طلب الـ /login للمالك
-    if step == "phone" and user_id == ADMIN_ID:
-        context.user_data["phone"] = text_input.strip()
-        await update.message.reply_text("⏳ جاري إرسال رمز تسجيل الدخول لحسابك المساعد المعتمد...")
-        try:
-            if not user_bot_is_live():
-                await userbot.connect()
-            code_hash = await userbot.send_code(text_input.strip())
-            context.user_data["code_hash"] = code_hash.phone_code_hash
-            context.user_data["login_step"] = "code"
-            await update.message.reply_text("📥 وصلك الرمز الحين من تليجرام! أرسله لي هنا بوضع مسافة بين الأرقام.")
-        except Exception as e:
-            logger.error(f"Send code error: {e}")
-            await update.message.reply_text(f"❌ فشل إرسال الرمز: `{e}`\nيرجى إعادة إرسال الرقم بشكل سليم.")
-        return
-
-    elif step == "code" and user_id == ADMIN_ID:
-        phone = context.user_data.get("phone")
-        code_hash = context.user_data.get("code_hash")
-        pure_code = text_input.strip().replace(" ", "")
-        await update.message.reply_text("⚙️ جاري التوثيق وتوليد كود الـ BQ الحين...")
-        try:
-            await userbot.sign_in(phone_number=phone, phone_code_hash=code_hash, phone_code=pure_code)
-            exported_session = await userbot.export_session_string()
-            context.user_data["login_step"] = None
-            await update.message.reply_text(
-                f"✅ **تم ربط وتفعيل الحساب المساعد بنجاح!**\n\n"
-                f"انسخ كود الـ BQ الطويل هذا وضعه في متغيرات Render باسم `STRING_SESSION`:\n\n"
-                f"`{exported_session}`",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.error(f"Sign in error: {e}")
-            await update.message.reply_text(f"❌ رمز التحقق المكتوب غير صحيح: `{e}`\nأعد المحاولة من جديد.")
-        return
-
-    # محرك البحث الطبيعي المعتمد للأفلام والمسلسلات
-    search_query = text_input
+# 6. دالة استقبال نصوص البحث والربط الشامل بالبطاقات والبوسترات
+async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    search_query = update.message.text
     search_type = context.user_data.get('search_type', 'multi')
     chat_id = update.message.chat_id
 
@@ -555,10 +488,7 @@ async def handle_message_all(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
 
-        # تشغيل نظام قش قنوات تليجرام المعتمدة بالتوازي بالتزامن مع الموقع
-        tg_files = await search_movies_in_channels(search_query)
-
-        await send_movie_card(context, chat_id, results[0], tg_files=tg_files)
+        await send_movie_card(context, chat_id, results[0])
         context.user_data['search_type'] = 'multi'
 
     except Exception as e:
@@ -567,25 +497,28 @@ async def handle_message_all(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "⚠️ حدث خطأ أثناء الاتصال بالخادم الافتراضي."
         )
 
-# 7. تشغيل البوت متزامن بالكامل ومربوط مع FastAPI لـ Render لضمان القوة والامتناع عن التعليق
+# 7. تشغيل البوت متزامن بالكامل ومربوط مع الحساب المساعد و FastAPI لـ Render
 @app.on_event("startup")
 async def startup_event():
-    if SESSION_STRING:
-        try:
-            await userbot.start()
-            logger.info("تم تشغيل وإقلاع الحساب المساعد بنجاح من الـ Session String المعتمد!")
-        except Exception as e:
-            logger.error(f"Failed to start userbot with session: {e}")
-
+    global client_helper
     try:
+        # [أولاً]: تشغيل وتثبيت الحساب المساعد (Userbot) بالخلفية تلقائياً إذا توفر الكود
+        if SESSION_STRING:
+            try:
+                client_helper = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+                await client_helper.start()
+                logger.info("تم تفعيل وتشغيل الحساب المساعد الصامت بالخلفية بنجاح!")
+            except Exception as helper_err:
+                logger.error(f"فشل تشغيل الحساب المساعد بالخلفية: {helper_err}")
+
+        # [ثانياً]: إعداد وتحديث بوت التليجرام الرئيسي
         application = Application.builder().token(BOT_TOKEN).build()
 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("login", login_command))
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message_all)
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
         )
 
         await application.initialize()
@@ -593,12 +526,12 @@ async def startup_event():
 
         await application.bot.set_my_commands([
             BotCommand("start", "🚀 تشغيل البوت والتحكم الرئيسي"),
-            BotCommand("help", "🔍 شرح طريقة استخدام البوت"),
-            BotCommand("login", "📱 ربط وتفعيل الحساب المساعد وقش القنوات")
+            BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
 
+        # تشغيل الـ polling بداخل Task منفصلة ومتوازية لمنع تعليق خادم ريندر نهائياً
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("تم تفعيل الكود الأمن المطوّل والهجين بنجاح كامل بدون أخطاء!")
+        logger.info("تم تفعيل الكود الأمن المضاد للتعليق بنجاح!")
 
     except Exception as e:
         logger.error(f"Startup error: {e}")
