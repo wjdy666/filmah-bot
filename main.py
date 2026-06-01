@@ -15,8 +15,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والرموز الأساسية (تم إضافة التوكن الخاص بك مباشرة هنا)
-BOT_TOKEN = "7965754682:AAFmPOMLvwnUkges2MbxgzI9QYrNCJxvVbQ"
+# 2. الإعدادات والرموز الأساسية (تم تعديل التوكن ليعتمد بالكامل على متغيرات البيئة لضمان الأمان)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
 
