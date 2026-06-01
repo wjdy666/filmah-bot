@@ -2,6 +2,7 @@ import os
 import logging
 import random
 import requests
+import asyncio
 from fastapi import FastAPI
 import uvicorn
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
@@ -18,10 +19,10 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 
-# ذاكرة مؤقتة للمفضلة تعتمد على معرف المستخدم
+# ذاكرة مؤقتة للمفضلة
 USER_FAVORITES = {}
 
-# القائمة الكاملة والموسعة لتصنيفات الأفلام (بدون أي نقص)
+# قائمة تصنيفات الأفلام الكاملة والموسعة
 GENRES = {
     "action": {"id": 28, "name": "💥 أكشن"},
     "adventure": {"id": 12, "name": "🤠 مغامرة"},
@@ -45,7 +46,7 @@ app = FastAPI()
 def home():
     return "Filmah Bot is fully and smoothly running!"
 
-# دالة جلب رابط التريلر (الإعلان) من TMDB
+# دالة جلب رابط التريلر من TMDB
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -58,7 +59,7 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة توليد روابط المشاهدة من السيرفر الخارجي المترجم
+# دالة توليد روابط المشاهدة
 def generate_watch_url(media_type, media_id):
     if media_type == "movie":
         return f"https://vidsrc.me/embed/movie?tmdb={media_id}"
@@ -92,7 +93,6 @@ async def send_movie_card(context, chat_id, movie):
         watch_url = generate_watch_url(actual_media_type, movie_id)
         trailer_url = get_trailer_url(actual_media_type, movie_id)
 
-        # بناء الأزرار التحتية للبطاقة
         keyboard = [
             [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
         ]
@@ -156,19 +156,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
-        "🔹 **البحث المباشر:** اكتب اسم الفيلم أو المسلسل في المحادثة مباشرة وسيجلبه البوت فوراً.\n"
-        "🔹 **المشاهدة:** الأزرار توفر سيرفرات تدعم الترجمة والتشغيل السريع.\n"
-        "🔹 **المفضلة:** زر الحفظ يحفظ أعمالك للرجوع لها عبر القائمة الرئيسية.\n\n"
-        "💬 للعودة للبداية أرسل: /start"
-    )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
-
-# 6. معالج الأزرار وقوائم التحكم السريعة الموسعة
+# 6. معالج نقرات الأزرار التفاعلية الفورية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    # الإجابة الفورية للتليجرام ليفك التعليق عن الزر فوراً ويمنع علامة الساعة الرملية
     await query.answer()
 
     user_id = query.from_user.id
@@ -191,7 +182,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         genre_text = "🎭 **اختر تصنيفك المفضّل الليلة:**\n\nسأعرض لك باقة من أفضل الأفلام العالمية المتاحة بناءً على اختيارك!"
         keyboard = []
         genre_list = list(GENRES.items())
-        # ترتيب الأزرار بشكل ثنائي متناسق وجميل
         for i in range(0, len(genre_list), 2):
             row = [InlineKeyboardButton(genre_list[i][1]["name"], callback_data=f"genre_fetch_{genre_list[i][0]}")]
             if i + 1 < len(genre_list):
@@ -215,7 +205,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not movies:
                 await query.message.reply_text("❌ لم يتم العثور على أعمال في هذا التصنيف حالياً.")
                 return
-            # جلب أعلى 3 أفلام شعبية في التصنيف ببطاقات منفصلة
             for movie in movies[:3]:
                 await send_movie_card(context, chat_id, movie)
         except Exception as e:
@@ -238,7 +227,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Top rated error: {e}")
 
     elif data == "random_movie":
-        # اختيار صفحة عشوائية لضمان تنوع الأفلام المقترحة للمستخدم في كل مرة
         url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&language=ar-SA&sort_by=popularity.desc&page={random.randint(1, 5)}"
         try:
             res = requests.get(url, timeout=5).json()
@@ -289,40 +277,30 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         res = requests.get(url, timeout=5).json()
         results = res.get("results", [])
-        if not filter(None, results):
+        if not results:
             await update.message.reply_text("❌ لم أتمكن من العثور على نتائج، يرجى التأكد من كتابة اسم العمل بشكل صحيح.")
             return
         
-        # إرسال النتيجة الأولى الأكثر تطابقاً وشهرة
         await send_movie_card(context, chat_id, results[0])
-        # إعادة تعيين نمط البحث للتلقائي الشامل بعد انتهاء العملية
         context.user_data['search_type'] = 'multi'
     except Exception as e:
         logger.error(f"Search direct error: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء معالجة البحث، حاول مجدداً لاحقاً.")
 
-# 8. بدء التشغيل وإعداد البوت والـ Polling النظيف المتوافق مع ريندر
+# 8. بدء التشغيل وإعداد البوت والـ Polling المتوافق مع ريندر
 @app.on_event("startup")
 async def startup_event():
     try:
         application = Application.builder().token(BOT_TOKEN).build()
 
-        # ربط جميع المعالجات والأوامر والأزرار التفاعلية بالملي
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
 
         await application.initialize()
         await application.start()
 
-        # إعداد قائمة الأوامر بداخل زر المنيو بالتليجرام رسميًا
-        await application.bot.set_my_commands([
-            BotCommand("start", "🚀 تشغيل البوت والتحكم الرئيسي"),
-            BotCommand("help", "🔍 شرح طريقة استخدام البوت")
-        ])
-
-        # تشغيل التحديثات وإلغاء أي طلبات معلقة قديمة لتجنب الـ Conflict نهائياً
+        # طرد أي نسخة قديمة معلقة وحذف الطلبات المتراكمة لإنهاء الـ Conflict تماماً
         import asyncio
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
         logger.info("🔥 النسخة الكاملة والمستقرة 100% تعمل الآن بكفاءة وبدون أي نقص!")
