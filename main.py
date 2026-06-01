@@ -60,14 +60,16 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة وموحدة لتوليد روابط المشاهدة الخارجية الآمنة
-def generate_watch_url(media_type, media_id):
-    if media_type == "movie":
-        return f"https://vidsrc.me/embed/movie?tmdb={media_id}"
-    else:
-        return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
+# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً وتجنب الروابط المعطلة
+def generate_watch_servers(media_type, media_id):
+    path = "movie" if media_type == "movie" else "tv"
+    return {
+        "السيرفر الرئيسي 🚀": f"https://vidsrc.to/embed/{path}/{media_id}",
+        "سيرفر بديل 1 🎬": f"https://vidsrc.me/embed/{path}?tmdb={media_id}",
+        "سيرفر بديل 2 📺": f"https://multiembed.mov/directstream/{path}.php?tmdb={media_id}"
+    }
 
-# --- الدالة الاحترافية المحمية تماماً من التعليق لإرسال بطاقات الأفلام ---
+# --- الدالة الاحترافية المحدثة لإرسال بطاقات الأفلام بسيرفرات متعددة ---
 async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
@@ -88,7 +90,7 @@ async def send_movie_card(context, chat_id, movie):
             f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
             f"⭐ **التقييم:** {rating}/10\n\n"
             f"📝 **قصة العمل:**\n{overview}\n\n"
-            f"💡 _تنويه للمشاهدة:_ لتجنب الإعلانات المنبثقة المزعجة، يفضل فتح الروابط عبر متصفح يدعم حظر الإعلانات مثل **Brave**."
+            f"💡 _تنويه للمشاهدة:_ إذا واجهت مشكلة في السيرفر الرئيسي، جرب السيرفرات البديلة بالأسفل، ويفضل دائماً استخدام متصفح **Brave** لمنع الإعلانات."
         )
 
         trailer_url = None
@@ -97,11 +99,13 @@ async def send_movie_card(context, chat_id, movie):
         except:
             pass
 
-        watch_url = generate_watch_url(actual_media_type, movie_id)
-
-        keyboard = [
-            [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
-        ]
+        # توليد روابط السيرفرات المتعددة
+        servers = generate_watch_servers(actual_media_type, movie_id)
+        
+        keyboard = []
+        # إضافة السيرفرات كأزرار تحت بعضها
+        for name, url in servers.items():
+            keyboard.append([InlineKeyboardButton(name, url=url)])
 
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
