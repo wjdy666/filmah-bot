@@ -25,10 +25,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
 
-# إعدادات الحساب المساعد (تشتغل بالخلفية تماماً وبدون أزرار تسجيل دخول)
+# إعدادات الحساب المساعد (تم تعديل اسم المتغير لـ BQ_SESSION ليطابق اللي عندك بريندر)
 API_ID = int(os.environ.get("API_ID", 1234567))
 API_HASH = os.environ.get("API_HASH", "your_api_hash_here")
-SESSION_STRING = os.environ.get("SESSION_STRING")
+SESSION_STRING = os.environ.get("BQ_SESSION")  # يقرأ كود الـ BQ حقك مباشرة الحين
 
 # قنوات الأفلام المعتمدة لقش الملفات بالخلفية
 MOVIE_CHANNELS = ["@zaid_films", "@moviem_ar", "@iPhonKat", "@D7_TE"]
@@ -79,7 +79,6 @@ def generate_watch_url(media_type, media_id):
 # --- دالة قش القنوات بالخلفية عبر الحساب المساعد محمية تماماً من التعليق ---
 async def search_channels_for_file(query_text):
     global client_helper
-    # التحقق من أن الحساب متصل وجاهز تماماً
     if not client_helper or not SESSION_STRING:
         return None
     
@@ -139,7 +138,6 @@ async def send_movie_card(context, chat_id, movie):
 
         keyboard = []
 
-        # محاولة جلب ملف التليجرام مع حماية كاملة لو تعطل الحساب المساعد
         try:
             telegram_file_url = await search_channels_for_file(title)
             if telegram_file_url:
@@ -357,14 +355,13 @@ async def run_helper_bot():
     global client_helper
     if SESSION_STRING:
         try:
-            logger.info("جاري محاولة بدء الحساب المساعد في الخلفية...")
+            logger.info("جاري محاولة بدء الحساب المساعد في الخلفية عبر BQ_SESSION...")
             client_helper = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
             await client_helper.connect()
-            # التحقق الآمن بدون تعليق الـ Event Loop
             if await client_helper.is_user_authorized():
                 logger.info("✅ تم تفعيل وتشغيل الحساب المساعد الصامت بالخلفية بنجاح!")
             else:
-                logger.warning("⚠️ الجلسة السحابية (SESSION_STRING) موجودة ولكنها غير مصرحة أو منتهية.")
+                logger.warning("⚠️ كود الـ BQ موجود ولكنه غير مصرح به أو انتهى من التليجرام نفسه.")
         except Exception as helper_err:
             logger.error(f"❌ فشل تشغيل الحساب المساعد بالخلفية: {helper_err}")
 
