@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. الإعدادات والرموز الأساسية (تعتمد بالكامل على متغيرات البيئة لضمان الأمان)
+# 2. الإعدادات والرموز الأساسية
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or os.environ.get("API_KEY")
 ADMIN_ID = 1436656132
@@ -39,15 +39,15 @@ GENRES = {
     "thriller": {"id": 53, "name": "🥶 إثارة وتشويق"}
 }
 
-# 3. إعداد سيرفر الويب FastAPI للحفاظ على استقرار السيرفر من النوم في Render
+# 3. إعداد سيرفر الويب FastAPI
 app = FastAPI()
 
 @app.get("/")
 @app.head("/")
 def home():
-    return "Filmah Bot is fully and smoothly running with new servers!"
+    return "Filmah Bot is fully and smoothly running!"
 
-# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB بشكل آمن لمنع التعليق
+# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -60,16 +60,16 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة ومحدثة 100% بأحدث النطاقات الحية لتفادي الشاشات السوداء وأخطاء التحميل
+# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً
 def generate_watch_servers(media_type, media_id):
     path = "movie" if media_type == "movie" else "tv"
     return {
-        "🚀 السيرفر الأول (Multi-Source)": f"https://moviesapi.club/{path}/{media_id}",
-        "🎬 السيرفر الثاني (سريع ومترجم)": f"https://vidsrc.icu/embed/{path}/{media_id}",
-        "📺 السيرفر الثالث (Super Embed)": f"https://player.vidsrc.nl/embed/{path}/{media_id}"
+        "السيرفر الرئيسي 🚀": f"https://vidsrc.to/embed/{path}/{media_id}",
+        "سيرفر بديل 1 🎬": f"https://vidsrc.me/embed/{path}?tmdb={media_id}",
+        "سيرفر بديل 2 📺": f"https://multiembed.mov/directstream/{path}.php?tmdb={media_id}"
     }
 
-# --- الدالة الاحترافية المحدثة لإرسال بطاقات الأفلام بالسيرفرات الجديدة الجديدة ---
+# --- الدالة الاحترافية المحدثة لإرسال بطاقات الأفلام بسيرفرات متعددة ---
 async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
@@ -90,7 +90,7 @@ async def send_movie_card(context, chat_id, movie):
             f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
             f"⭐ **التقييم:** {rating}/10\n\n"
             f"📝 **قصة العمل:**\n{overview}\n\n"
-            f"💡 _تنويه هائل للمشاهدة:_ إذا واجهت شاشة سوداء، يرجى فتح الرابط عبر متصفحك الخارجي (مثل Brave أو Safari) بدلاً من متصفح التيليجرام الداخلي لضمان تشغيل الفيديو والترجمة بنجاح."
+            f"💡 _تنويه للمشاهدة:_ إذا واجهت مشكلة في السيرفر الرئيسي، جرب السيرفرات البديلة بالأسفل، ويفضل دائماً استخدام متصفح **Brave** لمنع الإعلانات."
         )
 
         trailer_url = None
@@ -99,11 +99,11 @@ async def send_movie_card(context, chat_id, movie):
         except:
             pass
 
-        # توليد روابط السيرفرات الجديدة والذكية
+        # توليد روابط السيرفرات المتعددة
         servers = generate_watch_servers(actual_media_type, movie_id)
         
         keyboard = []
-        # إضافة السيرفرات الجديدة كأزرار منفصلة
+        # إضافة السيرفرات كأزرار تحت بعضها
         for name, url in servers.items():
             keyboard.append([InlineKeyboardButton(name, url=url)])
 
@@ -173,8 +173,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
         "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
-        "🔹 **المشاهدة:** سيظهر لك خيارات سيرفرات متعددة حديثة تدعم الترجمة العربية تلقائياً وبأكثر من مصدر.\n"
-        "💡 _تنويه للمشاهدة:_ لتجربة خالية من الإعلانات المنبثقة، يفضل فتح روابط المشاهدة عبر متصفح يدعم حظر الإعلانات مثل **Brave**.\n"
+        "🔹 **المشاهدة:** سيظهر لك خيارات سيرفرات متعددة تدعم الترجمة العربية.\n"
+        "💡 _تنويه للمشاهدة:_ لتجربة خالية من الإعلانات المنبثقة المزعجة، يفضل فتح روابط المشاهدة عبر متصفح يدعم حظر الإعلانات مثل **Brave**.\n"
         "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
     )
@@ -304,13 +304,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: pass
         await start(update, context)
 
-# 6. دالة استقبال نصوص البحث والربط الشامل بالبطاقات والبوسترات
+# 6. دالة استقبال نصوص البحث
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text
     search_type = context.user_data.get('search_type', 'multi')
     chat_id = update.message.chat_id
 
-    await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في سيرفرات فِلْمَه الجديدة...", parse_mode="Markdown")
+    await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في سيرفرات فِلْمَه...", parse_mode="Markdown")
     url = f"https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={search_query}&language=ar"
 
     try:
@@ -346,9 +346,8 @@ async def startup_event():
             BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
 
-        # كود طرد الطلبات المتراكمة تلقائياً لمنع الـ Conflict نهائياً في ريندر
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("تم تفعيل الكود الآمن المحدث بالسيرفرات الجديدة بنجاح!")
+        logger.info("تم تفعيل الكود الآمن وتجاوز التعليق بنجاح!")
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
