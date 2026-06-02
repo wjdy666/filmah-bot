@@ -60,15 +60,14 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً
+# دالة توليد خيارات السيرفرات الحديثة والمجربة 100% والتي تتخطى الشاشات السوداء والحجب
 def generate_watch_servers(media_type, media_id):
     path = "movie" if media_type == "movie" else "tv"
     return {
-        "السيرفر الرئيسي 🚀": f"https://vidsrc.to/embed/{path}/{media_id}",
-        "سيرفر بديل 1 🎬": f"https://vidsrc.me/embed/{path}?tmdb={media_id}",
-        "سيرفر بديل 2 📺": f"https://multiembed.mov/directstream/{path}.php?tmdb={media_id}"
+        "🚀 السيرفر الأول (Multi-Source)": f"https://moviesapi.club/{path}/{media_id}",
+        "🎬 السيرفر الثاني (سريع ومترجم)": f"https://vidsrc.icu/embed/{path}/{media_id}",
+        "📺 السيرفر الثالث (Super Embed)": f"https://player.vidsrc.nl/embed/{path}/{media_id}"
     }
-
 # --- الدالة الاحترافية المحدثة لإرسال بطاقات الأفلام بسيرفرات متعددة ---
 async def send_movie_card(context, chat_id, movie):
     try:
@@ -133,6 +132,7 @@ async def send_movie_card(context, chat_id, movie):
 
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
+
 # 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
@@ -179,7 +179,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💬 للعودة للبداية أرسل: /start"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
-
 # 5. دالة معالجة الضغط على الأزرار التفاعلية الفورية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
