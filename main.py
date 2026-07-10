@@ -23,31 +23,24 @@ ADMIN_ID = 1436656132
 # ذاكرة مؤقتة للمفضلة تعتمد على معرف المستخدم (ID)
 USER_FAVORITES = {}
 
-# قائمة تصنيفات الأفلام الكاملة والموسعة
+# قاموس لمعرفات تصنيفات الأفلام في TMDB
 GENRES = {
     "action": {"id": 28, "name": "💥 أكشن"},
-    "adventure": {"id": 12, "name": "🤠 مغامرة"},
-    "animation": {"id": 16, "name": "🎨 أنمي ورسوم"},
-    "comedy": {"id": 35, "name": "🍿 كوميدي"},
-    "crime": {"id": 80, "name": "🕵️ جريمة"},
-    "drama": {"id": 18, "name": "🎭 دراما"},
-    "family": {"id": 10751, "name": "👨‍👩‍👧 عائلي"},
-    "fantasy": {"id": 14, "name": "🧝 خيال وفانتازيا"},
     "horror": {"id": 27, "name": "👻 رعب"},
-    "mystery": {"id": 9648, "name": "🧩 غموض"},
-    "scifi": {"id": 878, "name": "🛸 خيال علمي"},
-    "thriller": {"id": 53, "name": "🥶 إثارة وتشويق"}
+    "comedy": {"id": 35, "name": "🍿 كوميدي"},
+    "drama": {"id": 18, "name": "🎭 دراما"},
+    "scifi": {"id": 878, "name": "🛸 خيال علمي"}
 }
 
-# 3. إعداد سيرفر الويب FastAPI
+# 3. إعداد سيرفر الويب FastAPI للحفاظ على استقرار السيرفر من النوم
 app = FastAPI()
 
 @app.get("/")
 @app.head("/")
 def home():
-    return "Filmah Bot is fully and smoothly running!"
+    return "Bot is alive and running!"
 
-# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB
+# دالة مساعدة رئيسية ومطورة لجلب رابط التريلر من TMDB بشكل آمن لمنع التعليق
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -60,16 +53,14 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة لتوليد خيارات سيرفرات متعددة لضمان عمل الرابط دائماً
-def generate_watch_servers(media_type, media_id):
-    path = "movie" if media_type == "movie" else "tv"
-    return {
-        "السيرفر الرئيسي 🚀": f"https://vidsrc.to/embed/{path}/{media_id}",
-        "سيرفر بديل 1 🎬": f"https://vidsrc.me/embed/{path}?tmdb={media_id}",
-        "سيرفر بديل 2 📺": f"https://multiembed.mov/directstream/{path}.php?tmdb={media_id}"
-    }
+# دالة مطورة وموحدة لتوليد روابط المشاهدة الخارجية الآمنة
+def generate_watch_url(media_type, media_id):
+    if media_type == "movie":
+        return f"https://vidsrc.me/embed/movie?tmdb={media_id}"
+    else:
+        return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
 
-# --- الدالة الاحترافية المحدثة لإرسال بطاقات الأفلام بسيرفرات متعددة ---
+# --- 🌟 الدالة الاحترافية المحمية تماماً من التعليق لإرسال بطاقات الأفلام 🌟 ---
 async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
@@ -79,7 +70,7 @@ async def send_movie_card(context, chat_id, movie):
         rating = movie.get("vote_average", 0.0)
         poster_path = movie.get("poster_path")
 
-        overview = movie.get("overview") or "لا يوجد وصف متوفر حالياً باللغة العربية لهذا العمل السينمائي."
+        overview = movie.get("overview") or "لا يوجد وصف متوفر حالياً باللغة العربية لهذا العمل السينمائية."
         if len(overview) > 400:
             overview = overview[:400] + "..."
 
@@ -90,7 +81,7 @@ async def send_movie_card(context, chat_id, movie):
             f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
             f"⭐ **التقييم:** {rating}/10\n\n"
             f"📝 **قصة العمل:**\n{overview}\n\n"
-            f"💡 _تنويه للمشاهدة:_ إذا واجهت مشكلة في السيرفر الرئيسي، جرب السيرفرات البديلة بالأسفل، ويفضل دائماً استخدام متصفح **Brave** لمنع الإعلانات."
+            f"💡 _تنويه للمشاهدة:_ لتجنب الإعلانات المنبثقة المزعجة، يفضل فتح الروابط عبر متصفح يدعم حظر الإعلانات مثل **Brave**."
         )
 
         trailer_url = None
@@ -99,13 +90,11 @@ async def send_movie_card(context, chat_id, movie):
         except:
             pass
 
-        # توليد روابط السيرفرات المتعددة
-        servers = generate_watch_servers(actual_media_type, movie_id)
-        
-        keyboard = []
-        # إضافة السيرفرات كأزرار تحت بعضها
-        for name, url in servers.items():
-            keyboard.append([InlineKeyboardButton(name, url=url)])
+        watch_url = generate_watch_url(actual_media_type, movie_id)
+
+        keyboard = [
+            [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
+        ]
 
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
@@ -133,6 +122,7 @@ async def send_movie_card(context, chat_id, movie):
 
     except Exception as card_error:
         logger.error(f"Critical error inside send_movie_card: {card_error}")
+
 # 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
@@ -160,27 +150,92 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.message:
-        await update.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
+        await update.message.reply_text(
+            welcome,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+
     elif update.callback_query:
         try:
             await update.callback_query.message.delete()
         except:
             pass
-        await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
+
+        await update.callback_query.message.reply_text(
+            welcome,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
 
 # أمر المساعدة
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
         "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
-        "🔹 **المشاهدة:** سيظهر لك خيارات سيرفرات متعددة تدعم الترجمة العربية.\n"
+        "🔹 **المشاهدة:** سيظهر لك زر '🍿 مشاهدة العمل الآن' يأخذك لسيرفر خارجي يدعم الترجمة العربية.\n"
         "💡 _تنويه للمشاهدة:_ لتجربة خالية من الإعلانات المنبثقة المزعجة، يفضل فتح روابط المشاهدة عبر متصفح يدعم حظر الإعلانات مثل **Brave**.\n"
         "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
     )
+
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# 5. دالة معالجة الضغط على الأزرار التفاعلية الفورية
+# دالة إضافية مساعدة لجلب وعرض الأفلام حسب التصنيف مع دعم التنقل والصفحات المتعددة
+async def fetch_and_show_genre_page(query, context, genre_key, page=1):
+    genre_id = GENRES[genre_key]["id"]
+    genre_name = GENRES[genre_key]["name"]
+
+    url = (
+        f"https://api.themoviedb.org/3/discover/movie"
+        f"?api_key={TMDB_API_KEY}"
+        f"&language=ar-SA"
+        f"&sort_by=popularity.desc"
+        f"&with_genres={genre_id}"
+        f"&page={page}"
+    )
+
+    try:
+        response = requests.get(url, timeout=5)
+        data_res = response.json()
+        movies = data_res.get("results", [])
+        total_pages = data_res.get("total_pages", 1)
+
+        if not movies:
+            await query.edit_message_text("❌ لم أتمكن من العثور على أعمال في هذا التصنيف حالياً.")
+            return
+
+        genre_text = f"🎭 **أفلام تصنيف {genre_name}**\n\nالصفحة: {page} من {total_pages}\nاختر فيلماً لعرض بطاقته الكاملة:"
+        
+        keyboard = []
+        for movie in movies[:10]:  # عرض 10 أفلام في الصفحة لقائمة مرتبة وسهلة الاختيار
+            title = movie.get("title") or "عمل غير معروف"
+            rating = movie.get("vote_average", 0.0)
+            movie_id = movie.get("id")
+            keyboard.append([InlineKeyboardButton(f"🎬 {title} ({rating}⭐)", callback_data=f"view_movie_{movie_id}")])
+
+        # أزرار التنقل للأمام والخلف
+        navigation_row = []
+        if page > 1:
+            navigation_row.append(InlineKeyboardButton("⬅️ السابق", callback_data=f"genre_page_{genre_key}_{page-1}"))
+        if page < total_pages:
+            navigation_row.append(InlineKeyboardButton("التالي ➡️", callback_data=f"genre_page_{genre_key}_{page+1}"))
+        
+        if navigation_row:
+            keyboard.append(navigation_row)
+
+        keyboard.append([InlineKeyboardButton("🔙 العودة لقائمة التصنيفات", callback_data="show_genres")])
+
+        await query.edit_message_text(
+            genre_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except Exception as e:
+        logger.error(f"Error fetching genre films page: {e}")
+        await query.message.reply_text("⚠️ خطأ في الاتصال بالخادم، حاول مجدداً.")
+
+# 5. دالة معالجة الضغط على الأزرار التفاعلية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -191,141 +246,246 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "search_movie":
         context.user_data['search_type'] = 'movie'
-        await query.edit_message_text("📥 أرسل لي اسم **الفيلم** الذي تبحث عنه باللغة العربية أو الإنجليزية:")
+        await query.edit_message_text(
+            "📥 أرسل لي اسم **الفيلم** الذي تبحث عنه باللغة العربية أو الإنجليزية:"
+        )
 
     elif data == "search_tv":
         context.user_data['search_type'] = 'tv'
-        await query.edit_message_text("📥 أرسل لي اسم **المسلسل** الذي تبحث عنه:")
+        await query.edit_message_text(
+            "📥 أرسل لي اسم **المسلسل** الذي تبحث عنه:"
+        )
 
     elif data == "search_general":
         context.user_data['search_type'] = 'multi'
-        await query.edit_message_text("📥 اكتب كلمة البحث العامة وسأفتش لك في الأفلام والمسلسلات معاً:")
+        await query.edit_message_text(
+            "📥 اكتب كلمة البحث العامة وسأفتش لك في الأفلام والمسلسلات معاً:"
+        )
 
     elif data == "show_genres":
-        genre_text = "🎭 **اختر تصنيفك المفضّل الليلة:**\n\nسأجلب لك باقة من أفضل الأفلام العالمية بناءً على اختيارك ببطاقات كاملة!"
+        genre_text = (
+            "🎭 **اختر تصنيفك المفضّل الليلة:**\n\n"
+            "سأجلب لك باقة من أفضل الأفلام العالمية بناءً على اختيارك ببطاقات كاملة!"
+        )
+
         keyboard = []
         genre_list = list(GENRES.items())
 
         for i in range(0, len(genre_list), 2):
-            row = [InlineKeyboardButton(genre_list[i][1]["name"], callback_data=f"genre_fetch_{genre_list[i][0]}")]
+            row = [
+                InlineKeyboardButton(
+                    genre_list[i][1]["name"],
+                    callback_data=f"genre_fetch_{genre_list[i][0]}"
+                )
+            ]
+
             if i + 1 < len(genre_list):
-                row.append(InlineKeyboardButton(genre_list[i + 1][1]["name"], callback_data=f"genre_fetch_{genre_list[i + 1][0]}"))
+                row.append(
+                    InlineKeyboardButton(
+                        genre_list[i + 1][1]["name"],
+                        callback_data=f"genre_fetch_{genre_list[i + 1][0]}"
+                    )
+                )
+
             keyboard.append(row)
 
-        keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="main_menu")])
-        await query.edit_message_text(genre_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        keyboard.append([
+            InlineKeyboardButton(
+                "🔙 العودة للقائمة الرئيسية",
+                callback_data="main_menu"
+            )
+        ])
 
+        await query.edit_message_text(
+            genre_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    # ======== التعديل الجديد للتصنيفات والتنقل المتطور بدون حذف القديم ========
     elif data.startswith("genre_fetch_"):
         genre_key = data.split("_")[2]
-        genre_id = GENRES[genre_key]["id"]
-        genre_name = GENRES[genre_key]["name"]
+        await fetch_and_show_genre_page(query, context, genre_key, page=1)
 
-        status_msg = await query.message.reply_text(f"🔄 جاري جلب أفلام {genre_name}...")
-        url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&language=ar-SA&sort_by=popularity.desc&with_genres={genre_id}&page=1"
+    elif data.startswith("genre_page_"):
+        parts = data.split("_")
+        genre_key = parts[2]
+        page = int(parts[3])
+        await fetch_and_show_genre_page(query, context, genre_key, page)
 
+    elif data.startswith("view_movie_"):
+        movie_id = data.split("_")[2]
+        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}&language=ar-SA"
         try:
-            response = requests.get(url, timeout=5)
-            data_res = response.json()
-            movies = data_res.get("results", [])
-
-            try: await status_msg.delete()
-            except: pass
-
-            if not movies:
-                await query.message.reply_text("❌ لم أتمكن من العثور على أعمال في هذا التصنيف حالياً.")
-                return
-
-            for movie in movies[:3]:
-                await send_movie_card(context, chat_id, movie)
+            movie = requests.get(url, timeout=5).json()
+            await send_movie_card(context, chat_id, movie)
         except Exception as e:
-            logger.error(f"Error fetching genre films: {e}")
-            await query.message.reply_text("⚠️ خطأ في الاتصال بالخادم، حاول مجدداً.")
+            logger.error(f"Error fetching movie detail: {e}")
+    # ======================================================================
 
     elif data == "top_rated":
-        status_msg = await query.message.reply_text("🔄 جاري جلب أعلى الأفلام تقييماً...")
-        url = f"https://api.themoviedb.org/3/movie/top_rated?api_key={TMDB_API_KEY}&language=ar-SA&page=1"
+        status_msg = await query.message.reply_text(
+            "🔄 جاري جلب أعلى الأفلام تقييماً..."
+        )
+
+        url = (
+            f"https://api.themoviedb.org/3/movie/top_rated"
+            f"?api_key={TMDB_API_KEY}"
+            f"&language=ar-SA"
+            f"&page=1"
+        )
 
         try:
             response = requests.get(url, timeout=5)
             data_res = response.json()
+
+            # تصحيح آمن لجلب النتائج
             movies = data_res.get("results", [])
 
-            try: await status_msg.delete()
-            except: pass
+            try:
+                await status_msg.delete()
+            except:
+                pass
 
             if not movies:
-                await query.message.reply_text("❌ لم أتمكن من جلب الأفلام حالياً.")
+                await query.message.reply_text(
+                    "❌ لم أتمكن من جلب الأفلام حالياً."
+                )
                 return
 
+            # جلب أول 3 أفلام فقط
             for movie in movies[:3]:
                 await send_movie_card(context, chat_id, movie)
+
         except Exception as e:
             logger.error(f"Error top rated: {e}")
-            await query.message.reply_text("⚠️ خطأ في الاتصال بخادم الأفلام.")
+
+            await query.message.reply_text(
+                "⚠️ خطأ في الاتصال بخادم الأفلام."
+            )
 
     elif data == "random_movie":
-        url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&language=ar-SA&sort_by=popularity.desc&page={random.randint(1, 5)}"
+        url = (
+            f"https://api.themoviedb.org/3/discover/movie"
+            f"?api_key={TMDB_API_KEY}"
+            f"&language=ar-SA"
+            f"&sort_by=popularity.desc"
+            f"&page={random.randint(1, 5)}"
+        )
+
         try:
             res = requests.get(url, timeout=5).json()
             results = res.get("results", [])
+
             if results:
                 movie = random.choice(results)
                 await send_movie_card(context, chat_id, movie)
+
         except Exception as e:
             logger.error(f"Error random movie: {e}")
 
     elif data.startswith("add_fav_"):
         media_id = data.split("_")[2]
-        url = f"https://api.themoviedb.org/3/movie/{media_id}?api_key={TMDB_API_KEY}&language=ar"
+
+        url = (
+            f"https://api.themoviedb.org/3/movie/{media_id}"
+            f"?api_key={TMDB_API_KEY}&language=ar"
+        )
+
         try:
             res = requests.get(url, timeout=5).json()
+
             title = res.get("title") or res.get("name") or "عمل غير معروف"
+
             if user_id not in USER_FAVORITES:
                 USER_FAVORITES[user_id] = []
+
             if title not in USER_FAVORITES[user_id]:
                 USER_FAVORITES[user_id].append(title)
-                await query.message.reply_text(f"✅ تم إضافة **{title}** إلى مفضلتك! ❤️", parse_mode="Markdown")
+
+                await query.message.reply_text(
+                    f"✅ تم إضافة **{title}** إلى مفضلتك! ❤️",
+                    parse_mode="Markdown"
+                )
+
             else:
-                await query.message.reply_text(f"ℹ️ **{title}** موجود بالفعل في مفضلتك.", parse_mode="Markdown")
+                await query.message.reply_text(
+                    f"ℹ️ **{title}** موجود بالفعل في مفضلتك.",
+                    parse_mode="Markdown"
+                )
+
         except:
             pass
 
     elif data == "show_favorites":
         favs = USER_FAVORITES.get(user_id, [])
-        if not favs:
-            fav_text = "❤️ **قائمتك المفضلة فارغة حالياً.**\nابحث عن أعمال وأضفها عبر زر الحفظ!"
-        else:
-            fav_text = "⭐ **قائمتك المفضلة في فِلْمَه:**\n\n" + "\n".join([f"🍿 - {item}" for item in favs])
 
-        await query.message.reply_text(fav_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 الرئيسية", callback_data="main_menu")]]))
+        if not favs:
+            fav_text = (
+                "❤️ **قائمتك المفضلة فارغة حالياً.**\n"
+                "ابحث عن أعمال وأضفها عبر زر الحفظ!"
+            )
+
+        else:
+            fav_text = (
+                "⭐ **قائمتك المفضلة في فِلْمَه:**\n\n"
+                + "\n".join([f"🍿 - {item}" for item in favs])
+            )
+
+        await query.message.reply_text(
+            fav_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 الرئيسية", callback_data="main_menu")]
+            ])
+        )
 
     elif data == "main_menu":
-        try: await query.message.delete()
-        except: pass
+        try:
+            await query.message.delete()
+        except:
+            pass
+
         await start(update, context)
 
-# 6. دالة استقبال نصوص البحث
+# 6. دالة استقبال نصوص البحث والربط الشامل بالبطاقات والبوسترات
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text
     search_type = context.user_data.get('search_type', 'multi')
     chat_id = update.message.chat_id
 
-    await update.message.reply_text(f"🔍 جاري البحث عن: *{search_query}* في سيرفرات فِلْمَه...", parse_mode="Markdown")
-    url = f"https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={search_query}&language=ar"
+    await update.message.reply_text(
+        f"🔍 جاري البحث عن: *{search_query}* في سيرفرات فِلْمَه...",
+        parse_mode="Markdown"
+    )
+
+    url = (
+        f"https://api.themoviedb.org/3/search/{search_type}"
+        f"?api_key={TMDB_API_KEY}"
+        f"&query={search_query}"
+        f"&language=ar"
+    )
 
     try:
         response = requests.get(url, timeout=5).json()
         results = response.get("results", [])
 
-        if not results:
-            await update.message.reply_text("❌ لم أتمكن من العثور على نتائج، تأكد من صحة الاسم.")
+        if not filter(None, results):
+            await update.message.reply_text(
+                "❌ لم أتمكن من العثور على نتائج، تأكد من صحة الاسم."
+            )
             return
 
         await send_movie_card(context, chat_id, results[0])
+
         context.user_data['search_type'] = 'multi'
+
     except Exception as e:
         logger.error(f"Search error: {e}")
-        await update.message.reply_text("⚠️ حدث خطأ أثناء الاتصال بالخادم الافتراضي.")
+
+        await update.message.reply_text(
+            "⚠️ حدث خطأ أثناء الاتصال بالخادم الافتراضي."
+        )
 
 # 7. تشغيل البوت متزامن بالكامل ومربوط مع FastAPI لـ Render
 @app.on_event("startup")
@@ -336,7 +496,9 @@ async def startup_event():
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
+        application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+        )
 
         await application.initialize()
         await application.start()
@@ -346,10 +508,16 @@ async def startup_event():
             BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
 
-        asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        logger.info("تم تفعيل الكود الآمن وتجاوز التعليق بنجاح!")
+        asyncio.create_task(application.updater.start_polling())
+
+        logger.info("تم تفعيل الكود الأمن المضاد للتعليق بنجاح!")
+
     except Exception as e:
         logger.error(f"Startup error: {e}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000))
+    )
