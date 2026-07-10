@@ -53,12 +53,25 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# دالة مطورة وموحدة لتوليد روابط المشاهدة الخارجية الآمنة
+# --- 🌟 دوال توليد روابط السيرفرات الثلاثة الأصلية 🌟 ---
 def generate_watch_url(media_type, media_id):
     if media_type == "movie":
         return f"https://vidsrc.me/embed/movie?tmdb={media_id}"
     else:
         return f"https://vidsrc.me/embed/tv?tmdb={media_id}"
+
+def generate_watch_url_alt1(media_type, media_id):
+    if media_type == "movie":
+        return f"https://vidsrc.to/embed/movie/{media_id}"
+    else:
+        return f"https://vidsrc.to/embed/tv/{media_id}"
+
+def generate_watch_url_alt2(media_type, media_id):
+    if media_type == "movie":
+        return f"https://embed.su/embed/movie/{media_id}"
+    else:
+        return f"https://embed.su/embed/tv/{media_id}"
+
 
 # --- 🌟 الدالة الاحترافية المحمية تماماً من التعليق لإرسال بطاقات الأفلام 🌟 ---
 async def send_movie_card(context, chat_id, movie):
@@ -90,10 +103,14 @@ async def send_movie_card(context, chat_id, movie):
         except:
             pass
 
-        watch_url = generate_watch_url(actual_media_type, movie_id)
+        # توليد السيرفرات الثلاثة
+        url_main = generate_watch_url(actual_media_type, movie_id)
+        url_alt1 = generate_watch_url_alt1(actual_media_type, movie_id)
+        url_alt2 = generate_watch_url_alt2(actual_media_type, movie_id)
 
         keyboard = [
-            [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
+            [InlineKeyboardButton("🍿 مشاهدة العمل (سيرفر أساسي)", url=url_main)],
+            [InlineKeyboardButton("💿 سيرفر بديل 1", url=url_alt1), InlineKeyboardButton("📀 سيرفر بديل 2", url=url_alt2)]
         ]
 
         if trailer_url:
@@ -124,10 +141,12 @@ async def send_movie_card(context, chat_id, movie):
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
 
-# --- 🌟 دالة مخصصة لإرسال بطاقة الفيلم مع البوستر وأزرار التنقل بشكل آمن دون الانهيار 🌟 ---
+# --- 🌟 دالة مخصصة لإرسال بطاقة الفيلم مع البوستر وأزرار التنقل والسيرفرات الثلاثة 🌟 ---
 async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, page, index):
     try:
         movie_id = movie.get("id")
+        actual_media_type = "movie" if "title" in movie else "tv"
+
         title = movie.get("title") or movie.get("name") or "عمل غير معروف"
         rating = movie.get("vote_average", 0.0)
         poster_path = movie.get("poster_path")
@@ -136,27 +155,36 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
         if len(overview) > 400:
             overview = overview[:400] + "..."
 
-        year = (movie.get("release_date") or "----")[:4]
+        year = (movie.get("release_date") or movie.get("first_air_date") or "----")[:4]
 
         result_text = (
             f"🎬 **الاسم:** {title} ({year})\n"
-            f"🏷️ **النوع:** فيلم 🎬\n"
+            f"🏷️ **النوع:** {'فيلم 🎬' if actual_media_type == 'movie' else 'مسلسل 📺'}\n"
             f"⭐ **التقييم:** {rating}/10\n\n"
             f"📝 **قصة العمل:**\n{overview}\n\n"
             f"💡 _تنويه للمشاهدة:_ لتجنب الإعلانات المنبثقة المزعجة، يفضل فتح الروابط عبر متصفح يدعم حظر الإعلانات مثل **Brave**."
         )
 
-        trailer_url = get_trailer_url("movie", movie_id)
-        watch_url = generate_watch_url("movie", movie_id)
+        trailer_url = None
+        try:
+            trailer_url = get_trailer_url(actual_media_type, movie_id)
+        except:
+            pass
+
+        # توليد السيرفرات الثلاثة هنا أيضاً للتنقل
+        url_main = generate_watch_url(actual_media_type, movie_id)
+        url_alt1 = generate_watch_url_alt1(actual_media_type, movie_id)
+        url_alt2 = generate_watch_url_alt2(actual_media_type, movie_id)
 
         keyboard = [
-            [InlineKeyboardButton("🍿 مشاهدة العمل الآن", url=watch_url)]
+            [InlineKeyboardButton("🍿 مشاهدة العمل (سيرفر أساسي)", url=url_main)],
+            [InlineKeyboardButton("💿 سيرفر بديل 1", url=url_alt1), InlineKeyboardButton("📀 سيرفر بديل 2", url=url_alt2)]
         ]
 
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
 
-        # إعداد أزرار التنقل
+        # إعداد أزرار التنقل (التالي والسابق)
         nav_buttons = []
         if index > 0 or page > 1:
             prev_index = index - 1 if index > 0 else 19
@@ -321,7 +349,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # ======== 🌟 تعديل التصنيفات الآمن والذكي 🌟 ========
     elif data.startswith("genre_fetch_"):
         genre_key = data.split("_")[2]
         genre_id = GENRES[genre_key]["id"]
@@ -343,7 +370,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ لم أتمكن من العثور على أعمال في هذا التصنيف حالياً.")
                 return
 
-            # حذف القائمة القديمة لإرسال البوستر مكانها بشكل سليم
             try:
                 await query.message.delete()
             except:
@@ -383,7 +409,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await send_movie_card_with_navigation(context, chat_id, movies[index], genre_key, page, index)
         except Exception as e:
             logger.error(f"Error in navigation: {e}")
-    # ====================================================================
 
     elif data == "top_rated":
         status_msg = await query.message.reply_text(
