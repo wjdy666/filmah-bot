@@ -124,16 +124,9 @@ async def send_movie_card(context, chat_id, movie):
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
 
-# --- 🌟 دالة مخصصة جديدة لإرسال بطاقة الفيلم مع البوستر وأزرار التنقل (السابق والتالي) بشكل صحيح 🌟 ---
-async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, page, index, old_message=None):
+# --- 🌟 دالة مخصصة لإرسال بطاقة الفيلم مع البوستر وأزرار التنقل بشكل آمن دون الانهيار 🌟 ---
+async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, page, index):
     try:
-        # حذف الرسالة القديمة لتجنب أخطاء تعديل النصوص إلى صور في تلغرام
-        if old_message:
-            try:
-                await old_message.delete()
-            except:
-                pass
-
         movie_id = movie.get("id")
         title = movie.get("title") or movie.get("name") or "عمل غير معروف"
         rating = movie.get("vote_average", 0.0)
@@ -163,7 +156,7 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
 
-        # أزرار التنقل
+        # إعداد أزرار التنقل
         nav_buttons = []
         if index > 0 or page > 1:
             prev_index = index - 1 if index > 0 else 19
@@ -322,19 +315,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
 
-        try:
-            await query.message.delete()
-        except:
-            pass
-
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=genre_text,
+        await query.edit_message_text(
+            genre_text,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # ======== 🌟 تعديل التصنيفات لتعمل بالبوسترات بشكل سليم 🌟 ========
+    # ======== 🌟 تعديل التصنيفات الآمن والذكي 🌟 ========
     elif data.startswith("genre_fetch_"):
         genre_key = data.split("_")[2]
         genre_id = GENRES[genre_key]["id"]
@@ -356,12 +343,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ لم أتمكن من العثور على أعمال في هذا التصنيف حالياً.")
                 return
 
-            # إرسال الفيلم الأول بالبوستر وحذف الرسالة النصية السابقة
-            await send_movie_card_with_navigation(context, chat_id, movies[0], genre_key, page=1, index=0, old_message=query.message)
+            # حذف القائمة القديمة لإرسال البوستر مكانها بشكل سليم
+            try:
+                await query.message.delete()
+            except:
+                pass
+
+            await send_movie_card_with_navigation(context, chat_id, movies[0], genre_key, page=1, index=0)
 
         except Exception as e:
             logger.error(f"Error fetching genre films: {e}")
-            await query.message.reply_text("⚠️ خطأ في الاتصال بالخادم، حاول مجدداً.")
+            await context.bot.send_message(chat_id=chat_id, text="⚠️ خطأ في الاتصال بالخادم، حاول مجدداً.")
 
     elif data.startswith("gnav_"):
         parts = data.split("_")
@@ -382,8 +374,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             response = requests.get(url, timeout=5).json()
             movies = response.get("results", [])
+            
             if movies and index < len(movies):
-                await send_movie_card_with_navigation(context, chat_id, movies[index], genre_key, page, index, old_message=query.message)
+                try:
+                    await query.message.delete()
+                except:
+                    pass
+                await send_movie_card_with_navigation(context, chat_id, movies[index], genre_key, page, index)
         except Exception as e:
             logger.error(f"Error in navigation: {e}")
     # ====================================================================
@@ -404,7 +401,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = requests.get(url, timeout=5)
             data_res = response.json()
 
-            # تصحيح آمن لجلب النتائج
             movies = data_res.get("results", [])
 
             try:
@@ -418,13 +414,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # جلب أول 3 أفلام فقط
             for movie in movies[:3]:
                 await send_movie_card(context, chat_id, movie)
 
         except Exception as e:
             logger.error(f"Error top rated: {e}")
-
             await query.message.reply_text(
                 "⚠️ خطأ في الاتصال بخادم الأفلام."
             )
@@ -468,14 +462,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if title not in USER_FAVORITES[user_id]:
                 USER_FAVORITES[user_id].append(title)
 
-                await query.message.reply_text(
-                    f"✅ تم إضافة **{title}** إلى مفضلتك! ❤️",
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ تم إضافة **{title}** إلى مفضلتك! ❤️",
                     parse_mode="Markdown"
                 )
 
             else:
-                await query.message.reply_text(
-                    f"ℹ️ **{title}** موجود بالفعل في مفضلتك.",
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"ℹ️ **{title}** موجود بالفعل في مفضلتك.",
                     parse_mode="Markdown"
                 )
 
@@ -497,8 +493,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 + "\n".join([f"🍿 - {item}" for item in favs])
             )
 
-        await query.message.reply_text(
-            fav_text,
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=fav_text,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 الرئيسية", callback_data="main_menu")]
@@ -583,6 +580,6 @@ async def startup_event():
 if __name__ == "__main__":
     uvicorn.run(
         app,
-   تم     host="0.0.0.0",
+        host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000))
     )
