@@ -22,7 +22,6 @@ ADMIN_ID = 1436656132
 
 USER_FAVORITES = {}
 
-# قاموس أرقام التصنيفات للتحكم بالقوائم
 GENRES = {
     "action": {"id": 28, "name": "💥 أكشن"},
     "horror": {"id": 27, "name": "👻 رعب"},
@@ -31,7 +30,6 @@ GENRES = {
     "scifi": {"id": 878, "name": "🛸 خيال علمي"}
 }
 
-# 🌟 قاموس شامل لتحويل أرقام التصنيفات إلى أسماء باللغة العربية داخل بطاقة العمل 🌟
 GENRE_MAP = {
     28: "أكشن 💥", 12: "مغامرة 🏹", 16: "أنيميشن 🎨", 35: "كوميديا 🍿", 80: "جريمة 🔍",
     99: "وثائقي 📹", 18: "دراما 🎭", 10751: "عائلي 👨‍👩‍👧", 14: "فانتازيا 🧙‍♂️", 36: "تاريخ 📜",
@@ -46,7 +44,6 @@ app = FastAPI()
 def home():
     return "Bot is alive and running!"
 
-# دالة مساعدة لتوليد أسماء التصنيفات النصية للعمل
 def extract_genre_names(genre_ids, actual_media_type):
     if genre_ids:
         names = [GENRE_MAP.get(gid) for gid in genre_ids if gid in GENRE_MAP]
@@ -54,7 +51,6 @@ def extract_genre_names(genre_ids, actual_media_type):
             return " | ".join(names)
     return "فيلم 🎬" if actual_media_type == "movie" else "مسلسل 📺"
 
-# دالة التريلر
 def get_trailer_url(media_type, media_id):
     url = f"https://api.themoviedb.org/3/{media_type}/{media_id}/videos?api_key={TMDB_API_KEY}"
     try:
@@ -67,7 +63,6 @@ def get_trailer_url(media_type, media_id):
         logger.error(f"Error fetching trailer: {e}")
     return None
 
-# سيرفرات المشاهدة الثلاثة
 def generate_watch_url(media_type, media_id):
     return f"https://vidsrc.me/embed/movie?tmdb={media_id}" if media_type == "movie" else f"https://vidsrc.me/embed/tv?tmdb={media_id}"
 
@@ -78,7 +73,6 @@ def generate_watch_url_alt2(media_type, media_id):
     return f"https://embed.su/embed/movie/{media_id}" if media_type == "movie" else f"https://embed.su/embed/tv/{media_id}"
 
 
-# --- 🌟 دالة إرسال بطاقة الأفلام (العامة والبحث) 🌟 ---
 async def send_movie_card(context, chat_id, movie):
     try:
         movie_id = movie.get("id")
@@ -88,7 +82,6 @@ async def send_movie_card(context, chat_id, movie):
         rating = movie.get("vote_average", 0.0)
         poster_path = movie.get("poster_path")
 
-        # استخراج التصنيفات الفعلية بدقة
         genre_ids = movie.get("genre_ids", [])
         genres_text = extract_genre_names(genre_ids, actual_media_type)
 
@@ -122,7 +115,8 @@ async def send_movie_card(context, chat_id, movie):
 
         keyboard.append([
             InlineKeyboardButton("❤️ للمفضلة", callback_data=f"add_fav_{movie_id}"),
-            InlineKeyboardButton("🎭 قائمة التصنيفات", callback_data="show_genres")
+            InlineKeyboardButton("🎭 التصنيفات", callback_data="show_genres"),
+            InlineKeyboardButton("🏠 الرئيسية", callback_data="main_menu")
         ])
 
         if poster_path:
@@ -145,7 +139,6 @@ async def send_movie_card(context, chat_id, movie):
         logger.error(f"Critical error inside send_movie_card: {card_error}")
 
 
-# --- 🌟 دالة إرسال بطاقة الفيلم للتنقل والتصنيفات 🌟 ---
 async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, page, index):
     try:
         movie_id = movie.get("id")
@@ -155,7 +148,6 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
         rating = movie.get("vote_average", 0.0)
         poster_path = movie.get("poster_path")
 
-        # استخراج التصنيفات الفعلية
         genre_ids = movie.get("genre_ids", [])
         genres_text = extract_genre_names(genre_ids, actual_media_type)
 
@@ -187,7 +179,6 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
 
-        # أزرار التنقل (السابق والتالي)
         nav_buttons = []
         if index > 0 or page > 1:
             prev_index = index - 1 if index > 0 else 19
@@ -202,7 +193,8 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
 
         keyboard.append([
             InlineKeyboardButton("❤️ للمفضلة", callback_data=f"add_fav_{movie_id}"),
-            InlineKeyboardButton("🎭 قائمة التصنيفات", callback_data="show_genres")
+            InlineKeyboardButton("🎭 قائمة التصنيفات", callback_data="show_genres"),
+            InlineKeyboardButton("🏠 الرئيسية", callback_data="main_menu")
         ])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -227,7 +219,6 @@ async def send_movie_card_with_navigation(context, chat_id, movie, genre_key, pa
         logger.error(f"Error in send_movie_card_with_navigation: {e}")
 
 
-# 4. رسالة الترحيب الأصلية لبوت فِلْمَه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "🎬 **مرحباً بك في بوت فِلْمَه!**\n\n"
@@ -264,7 +255,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.callback_query.message.reply_text(welcome, parse_mode="Markdown", reply_markup=reply_markup)
 
-# أمر المساعدة
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
@@ -276,7 +266,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# 5. دالة معالجة الضغط على الأزرار التفاعلية
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -297,7 +286,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['search_type'] = 'multi'
         await query.message.reply_text("📥 اكتب كلمة البحث العامة وسأفتش لك في الأفلام والمسلسلات معاً:")
 
-    # 🌟 إصلاح عطل زر قائمة التصنيفات 🌟
     elif data == "show_genres":
         genre_text = (
             "🎭 **اختر تصنيفك المفضّل الليلة:**\n\n"
@@ -315,7 +303,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard.append([InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="main_menu")])
 
-        # حذف الرسالة السابقة لتفادي أخطاء تعديل البوسترات
         try:
             await query.message.delete()
         except:
@@ -482,7 +469,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await start(update, context)
 
-# 6. دالة استقبال نصوص البحث
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = update.message.text
     search_type = context.user_data.get('search_type', 'multi')
@@ -512,7 +498,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Search error: {e}")
         await update.message.reply_text("⚠️ حدث خطأ أثناء الاتصال بالخادم الافتراضي.")
 
-# 7. تشغيل البوت
+# 7. تشغيل البوت مع خاصية drop_pending_updates منعاً للتضارب
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -531,8 +517,9 @@ async def startup_event():
             BotCommand("help", "🔍 شرح طريقة استخدام البوت")
         ])
 
-        asyncio.create_task(application.updater.start_polling())
-        logger.info("تم تفعيل الكود بنجاح مع إصلاح التصنيفات والأزرار!")
+        # 🌟 تفعيل خيار إلغاء التحديثات القديمة لمنع خطأ الـ Conflict 🌟
+        asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
+        logger.info("تم تفعيل البوت بنجاح وإزالة أي تعارض سابق!")
 
     except Exception as e:
         logger.error(f"Startup error: {e}")
