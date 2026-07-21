@@ -3,7 +3,6 @@ import logging
 import asyncio
 import random
 import requests
-import aiohttp
 from fastapi import FastAPI
 import uvicorn
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
@@ -116,10 +115,6 @@ async def send_single_card(context, chat_id, item, nav_buttons=None):
                 InlineKeyboardButton("📀 سيرفر بديل 2", url=url_alt2)
             ]
         ]
-
-        # زر سحب الفيلم للمحادثة مباشرة
-        if actual_media_type == "movie":
-            keyboard.append([InlineKeyboardButton("📥 سحب وإرسال الفيلم هنا", callback_data=f"dl_movie_{media_id}")])
 
         if trailer_url:
             keyboard.append([InlineKeyboardButton("🎬 مشاهدة الإعلان (التريلر)", url=trailer_url)])
@@ -263,7 +258,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🍿 **دليل استخدام بوت فِلْمَه:**\n\n"
         "🔹 **البحث المباشر:** أرسل اسم أي فيلم أو مسلسل في المحادثة مباشرة.\n"
         "🔹 **المشاهدة:** اختر السيرفر الأساسي أو السيرفرات البديلة.\n"
-        "🔹 **سحب الفيلم:** يتيح لك زر سحب الفيلم تنزيله كملف فيديو داخل المحادثة.\n"
         "💡 _تنويه للمشاهدة:_ يفضل فتح روابط المشاهدة عبر متصفح **Brave** لحظر الإعلانات.\n"
         "🔹 **المفضلة:** اضغط '❤️ للمفضلة' لحفظ عملك والرجوع له لاحقاً.\n\n"
         "💬 للعودة للبداية أرسل: /start"
@@ -319,6 +313,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+    # 1. عند اختيار تصنيف -> إرسال 3 أفلام
     elif data.startswith("genre_fetch_"):
         genre_key = data.split("_")[2]
         try:
@@ -327,6 +322,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await fetch_and_send_batch(context, chat_id, "g", genre_key=genre_key, page=1, batch_idx=0)
 
+    # 2. عند اختيار أفضل الأفلام تقييماً -> إرسال 3 أفلام
     elif data == "top_rated":
         try:
             await query.message.delete()
@@ -334,9 +330,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await fetch_and_send_batch(context, chat_id, "t", genre_key="x", page=1, batch_idx=0)
 
+    # 3. معالج أزرار التنقل الموحد لجميع الأقسام (تنسيق مدمج آمن b_SECTION_GENRE_PAGE_BATCH)
     elif data.startswith("b_"):
         parts = data.split("_")
-        section_code = parts[1]
+        section_code = parts[1] # 'g', 't', 's'
         genre_key = parts[2]
         page = int(parts[3])
         batch_idx = int(parts[4])
@@ -347,45 +344,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
         await fetch_and_send_batch(context, chat_id, section_code, genre_key=genre_key, page=page, batch_idx=batch_idx)
-
-    # 📥 معالجة طلب سحب الفيلم وتنزيله مباشرة داخل المحادثة
-    elif data.startswith("dl_movie_"):
-        media_id = data.split("_")[2]
-        status_msg = await context.bot.send_message(chat_id=chat_id, text="⏳ جاري الاتصال بالسيرفر وسحب الفيلم...")
-
-        # رابط مباشر افتراضي (يمكنك استبداله برابط مباشر خاص بك أو محرك جلب خارجي)
-        direct_video_url = f"https://vidsrc.me/embed/movie?tmdb={media_id}" 
-        file_path = f"movie_{media_id}.mp4"
-
-        try:
-            await status_msg.edit_text("📥 جاري تحميل الفيلم على السيرفر، يرجى الانتظار...")
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(direct_video_url) as resp:
-                    if resp.status == 200:
-                        with open(file_path, 'wb') as f:
-                            f.write(await resp.read())
-
-                        await status_msg.edit_text("📤 اكتمل التحميل! جاري رفع الفيديو إليك الآن...")
-
-                        with open(file_path, 'rb') as video_file:
-                            await context.bot.send_video(
-                                chat_id=chat_id,
-                                video=video_file,
-                                caption="🎬 إليك الفيلم كاملاً للمشاهدة المباشرة!",
-                                supports_streaming=True
-                            )
-                        await status_msg.delete()
-                    else:
-                        await status_msg.edit_text("❌ اعتذار، يتعذر سحب هذا الفيلم مباشرة من المصدر حالياً. يمكنك استخدام روابط المشاهدة أعلاه.")
-
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            await status_msg.edit_text("⚠️ حدث خطأ أثناء جلب الفيلم أو تحويله. يرجى تجربة روابط المشاهدة المباشرة.")
-
-        finally:
-            if os.path.exists(file_path):
-                os.remove(file_path)
 
     elif data == "random_movie":
         url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&language=ar-SA&sort_by=popularity.desc&page={random.randint(1, 5)}"
